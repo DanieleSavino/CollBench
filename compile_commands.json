@@ -1,0 +1,24 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-c",
+      "-Iinclude",
+      "-I/usr/include",
+      "src/main.c"
+    ],
+    "directory": "/home/daniele/dev/CollBench",
+    "file": "/home/daniele/dev/CollBench/src/main.c"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-c",
+      "-Iinclude",
+      "-I/usr/include",
+      "src/bench.c"
+    ],
+    "directory": "/home/daniele/dev/CollBench",
+    "file": "/home/daniele/dev/CollBench/src/bench.c"
+  }
+]
