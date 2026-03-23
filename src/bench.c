@@ -1,5 +1,5 @@
-#include "bench.h"
-#include "errors.h"
+#include "CollBench/bench.h"
+#include "CollBench/errors.h"
 #include <stdio.h>
 #include <inttypes.h>
 #include <mpi.h>
@@ -10,20 +10,23 @@ static inline uint64_t getCurrentTimeNS(void) {
     return (uint64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
 }
 
-CB_Error_t CB_op_init(const char* const name, MPI_Request *req, size_t algo_idx, CB_OperationData_t **data) {
-    CB_OperationData_t *der_data = (CB_OperationData_t*)malloc(sizeof(CB_OperationData_t));
-    if(!der_data) {
+CB_Error_t CB_op_init(MPI_Request *req, size_t algo_idx, CB_OperationData_t **data) {
+    *data = (CB_OperationData_t*)malloc(sizeof(CB_OperationData_t));
+    if(! (*data)) {
         return CB_ERR_OUT_OF_MEM;
     }
 
-    der_data->name = name;
-    der_data->req = req;
-    der_data->algo_idx = algo_idx;
-    der_data->t_start_ns = 0;
-    der_data->t_wait_ns = 0;
-    der_data->t_end_ns = 0;
+    CB_op_init_ext(req, algo_idx, *data);
 
-    *data = der_data;
+    return CB_SUCCESS;
+}
+
+CB_Error_t CB_op_init_ext(MPI_Request *req, size_t algo_idx, CB_OperationData_t *data) {
+    data->req = req;
+    data->algo_idx = algo_idx;
+    data->t_start_ns = 0;
+    data->t_wait_ns = 0;
+    data->t_end_ns = 0;
 
     return CB_SUCCESS;
 }
@@ -78,7 +81,6 @@ CB_Error_t CB_op_pprint(const CB_OperationData_t * const data) {
     }
 
     printf("=== CB Operation Data ===\n");
-    printf("Name       : %s\n", data->name ? data->name : "(null)");
     printf("Algo index : %zu\n", data->algo_idx);
 
     if (data->req) {

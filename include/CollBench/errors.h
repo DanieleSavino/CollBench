@@ -5,6 +5,7 @@
 typedef enum {
     CB_SUCCESS = 0,
     CB_ERR_OUT_OF_MEM,
+    CB_ERR_OUT_OF_BOUNDS,
     CB_ERR_NULLPTR,
     CB_ERR_MPI,
 } CB_Error_t;

@@ -1,5 +1,5 @@
-#include "bench.h"
-#include "errors.h"
+#include "CollBench/bench.h"
+#include "CollBench/dist_list.h"
 #include <mpi.h>
 
 int main(void) {
@@ -11,16 +11,17 @@ int main(void) {
 
     int buff[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
     MPI_Request req;
-    CB_OperationData_t *data;
+    CB_DistList_t *list;
+    CB_dlist_init(&list, 1);
 
     if(rank == 0)
-        CB_OP_WRAP_NONBLOCKING("Send from root", 0, MPI_Isend(buff, 10, MPI_INT, 1, 0, MPI_COMM_WORLD, &req), &data, req);
+        CB_OP_LWRAP_NONBLOCKING(list, 0, MPI_Isend(buff, 10, MPI_INT, 1, 0, MPI_COMM_WORLD, &req), req);
     else 
-        CB_OP_WRAP_NONBLOCKING("Recv from 1", 1, MPI_Irecv(buff, 10, MPI_INT, 0, 0, MPI_COMM_WORLD, &req), &data, req);
+        CB_OP_LWRAP_NONBLOCKING(list, 1, MPI_Irecv(buff, 10, MPI_INT, 0, 0, MPI_COMM_WORLD, &req), req);
 
-    CB_op_pprint(data);
+    CB_dlist_pprint(list);
+    CB_dlist_free(list);
+
 
     MPI_Finalize();
-
-
 }

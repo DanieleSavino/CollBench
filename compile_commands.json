@@ -1,24 +1,62 @@
 [
   {
+    "file": "src/main.c",
     "arguments": [
-      "/usr/bin/gcc",
-      "-c",
+      "gcc",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
       "-Iinclude",
-      "-I/usr/include",
-      "src/main.c"
+      "-O3",
+      "-march=native",
+      "-DNDEBUG",
+      "-c",
+      "src/main.c",
+      "-o",
+      "build/obj/main.o",
+      "-I/usr/include"
     ],
     "directory": "/home/daniele/dev/CollBench",
-    "file": "/home/daniele/dev/CollBench/src/main.c"
+    "output": "build/obj/main.o"
   },
   {
+    "file": "src/bench.c",
     "arguments": [
-      "/usr/bin/gcc",
-      "-c",
+      "gcc",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
       "-Iinclude",
-      "-I/usr/include",
-      "src/bench.c"
+      "-O3",
+      "-march=native",
+      "-DNDEBUG",
+      "-c",
+      "src/bench.c",
+      "-o",
+      "build/obj/bench.o",
+      "-I/usr/include"
     ],
     "directory": "/home/daniele/dev/CollBench",
-    "file": "/home/daniele/dev/CollBench/src/bench.c"
+    "output": "build/obj/bench.o"
+  },
+  {
+    "file": "src/dist_list.c",
+    "arguments": [
+      "gcc",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Iinclude",
+      "-O3",
+      "-march=native",
+      "-DNDEBUG",
+      "-c",
+      "src/dist_list.c",
+      "-o",
+      "build/obj/dist_list.o",
+      "-I/usr/include"
+    ],
+    "directory": "/home/daniele/dev/CollBench",
+    "output": "build/obj/dist_list.o"
   }
 ]
