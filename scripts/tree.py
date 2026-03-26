@@ -6,7 +6,6 @@ import matplotlib.patches as mpatches
 import matplotlib.patheffects as pe
 from matplotlib.patches import FancyArrowPatch
 import matplotlib.font_manager as fm
-import numpy as np
 from collections import defaultdict
 import colorsys
 import math

@@ -1,13 +1,10 @@
-#include "CollBench/bench.h"
 #include "CollBench/dist_list.h"
 #include "CollBench/errors.h"
-#include "CollBench/export.h"
 #include "CollBench/init.h"
 #include <math.h>
 #include <mpi.h>
-#include <stdio.h>
 
-int rank2nb(int32_t rank, int bits) {
+static inline int rank2nb(int32_t rank, int bits) {
     const int size = (1 << bits);
     if(rank > 0x55555555) return -1;
 
@@ -17,24 +14,20 @@ int rank2nb(int32_t rank, int bits) {
     return val & (size - 1);
 }
 
-int nb2rank(int32_t nb, int bits) {
+static inline int nb2rank(int32_t nb, int bits) {
     const int size = (1 << bits);
     const uint32_t mask = 0xAAAAAAAA;
     const int32_t val = (mask ^ nb) - mask;
     return val & (size - 1);
 }
 
-int mod(int a, int b){
+static inline int mod(int a, int b){
     int r = a % b;
     return r < 0 ? r + b : r;
 }
 
-int bine_bcast_dhlv(void *buffer, int count, MPI_Datatype datatype, int root, MPI_Comm comm, CB_DistList_t **out) {
-    CB_Error_t err;
-
-    *out = NULL;
-    CB_DistList_t *list = NULL, *full_list = NULL;
-    CB_dlist_init(&list, 10);
+int bine_bcast_dhlv(void *buffer, int count, MPI_Datatype datatype, int root, MPI_Comm comm) {
+    CB_COLL_START();
 
     int rank, size;
     MPI_Comm_rank(comm, &rank);
@@ -47,10 +40,7 @@ int bine_bcast_dhlv(void *buffer, int count, MPI_Datatype datatype, int root, MP
 
     int mask = (1 << s) - 1;
     int rcvd = root == rank;
-    int idx = 0;
     while(mask > 0) {
-
-        printf("idx: %d\n", idx);
 
         int nb_q = nb_r ^ mask;
         int vq = nb2rank(nb_q, s);
@@ -62,28 +52,25 @@ int bine_bcast_dhlv(void *buffer, int count, MPI_Datatype datatype, int root, MP
         }
 
         if(rcvd) {
-            CB_LSEND(list, rank, idx, buffer, count, datatype, q, 0, comm, cleanup);
+            CB_LSEND(rank, s - __builtin_popcount(mask), buffer, count, datatype, q, 0, comm);
         }
         else {
             int eq_lsb = nb_r & mask;
             if(eq_lsb == 0 || eq_lsb == mask) {
-                CB_LRECV(list, rank, idx, buffer, count, datatype, q, 0, comm, cleanup);
+                CB_LRECV(rank, s - __builtin_popcount(mask), buffer, count, datatype, q, 0, comm);
                 rcvd = 1;
             }
         }
 
         mask >>= 1;
-        idx++;
     }
 
+    CB_COLL_END(comm, root, "bine_bcast.json");
 
-    cleanup:
-        CB_dlist_gather(list, MPI_COMM_WORLD, 0, &full_list);
-        *out = full_list;
-        CB_dlist_free(list);
-
-        return MPI_SUCCESS;
+    return MPI_SUCCESS;
 }
+
+#define ARR_LEN 100
 
 int main(int argc, char **argv) {
     CB_Error_t err = CB_SUCCESS;
@@ -94,30 +81,22 @@ int main(int argc, char **argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    CB_DistList_t *full_list = NULL;
-
     int *buff;
-    CB_MALLOC(buff, sizeof(int) * 10, cleanup);
-    for(int i = 0; i < 10; i++) {
+    CB_MALLOC(buff, sizeof(int) * ARR_LEN, cleanup);
+    for(int i = 0; i < ARR_LEN; i++) {
         buff[i] = rank == 0 ? i : 0;
     }
 
-    bine_bcast_dhlv(buff, 10, MPI_INT, 0, MPI_COMM_WORLD, &full_list);
+    bine_bcast_dhlv(buff, ARR_LEN, MPI_INT, 0, MPI_COMM_WORLD);
 
-    for(int i = 0; i < 10; i++) {
+    for(int i = 0; i < ARR_LEN; i++) {
         if(buff[i] != i) {
-            MPI_Abort(MPI_COMM_WORLD, 10);
+            MPI_Abort(MPI_COMM_WORLD, 1);
         }
     }
 
-    if (rank == 0) {
-        CB_dlist_pprint(full_list);
-        CB_dlist_export_json(full_list, "out.json");
-    }
-
-cleanup:
-    CB_dlist_free(full_list);
-    CB_finalize();
-    MPI_Finalize();
-    return err;
+    cleanup:
+        CB_finalize();
+        MPI_Finalize();
+        return err;
 }

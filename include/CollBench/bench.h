@@ -45,6 +45,9 @@ CB_Error_t CB_op_pprint(const CB_OperationData_t * const data);
 CB_Error_t CB_op_datatype_init(void);
 CB_Error_t CB_op_datatype_free(void);
 
+
+#ifdef CB_PROFILE
+
 #define CB_OP_WRAP_BLOCKING(rank, peer, op_type, algo_idx, call, ref_data, label)      \
 do {                                                              \
     CB_op_init(rank, peer, op_type, algo_idx, NULL, ref_data);                         \
@@ -61,19 +64,42 @@ do {                                                                     \
     CB_op_wait(*ref_data);                                               \
 } while(0)
 
-#define CB_SEND(rank, algo_idx, buff, count, datatype, dest, tag, comm, ref_data, label) \
+#define CB_SEND(rank, algo_idx, buff, count, datatype, dest, tag, comm, ref_data) \
 do { \
     MPI_Request _req; \
     CB_OP_WRAP_NONBLOCKING(rank, dest, CB_OP_SEND, algo_idx \
         MPI_Isend(buff, count, datatype, dest, tag, comm, &_req), \
-    ref_data, &_req, label); \
+    ref_data, &_req, _CB_cleanup_label); \
 } while(0)
 
-#define CB_RECV(rank, algo_idx, buff, count, datatype, source, tag, comm, ref_data, label) \
+#define CB_RECV(rank, algo_idx, buff, count, datatype, source, tag, comm, ref_data) \
 do { \
     MPI_Request _req; \
     CB_OP_WRAP_NONBLOCKING(rank, source, CB_OP_SEND, algo_idx \
         MPI_Irecv(buff, count, datatype, source, tag, comm, &_req), \
-    ref_data, &_req, label); \
+    ref_data, &_req, _CB_cleanup_label); \
 } while(0)
 
+#else
+
+#define CB_OP_WRAP_BLOCKING(rank, peer, op_type, algo_idx, call, ref_data, label) \
+    do { call; } while(0)
+
+#define CB_OP_WRAP_NONBLOCKING(rank, peer, op_type, algo_idx, call, ref_data, req_ref, label) \
+    do { call; } while(0)
+
+#define CB_SEND(rank, algo_idx, buff, count, datatype, dest, tag, comm, ref_data) \
+    do { \
+        MPI_Request _req; \
+        MPI_Isend(buff, count, datatype, dest, tag, comm, &_req); \
+        MPI_Wait(&_req, MPI_STATUS_IGNORE); \
+    } while(0)
+
+#define CB_RECV(rank, algo_idx, buff, count, datatype, source, tag, comm, ref_data) \
+    do { \
+        MPI_Request _req; \
+        MPI_Irecv(buff, count, datatype, source, tag, comm, &_req); \
+        MPI_Wait(&_req, MPI_STATUS_IGNORE); \
+    } while(0)
+
+#endif
