@@ -28,19 +28,20 @@ const char* CB_optype_str(CB_OpType_t op) {
     }
 }
 
-CB_Error_t CB_op_init(MPI_Request *req, int rank, CB_OpType_t op_type, size_t algo_idx, CB_OperationData_t **data) {
+CB_Error_t CB_op_init(int rank, int peer, CB_OpType_t op_type, size_t algo_idx, MPI_Request *req, CB_OperationData_t **data) {
     CB_Error_t err = CB_SUCCESS;
     CB_MALLOC(*data, sizeof(CB_OperationData_t), cleanup);
 
-    CB_CHECK(CB_op_init_ext(req, rank, op_type, algo_idx, *data), cleanup);
+    CB_CHECK(CB_op_init_ext(rank, peer, op_type, algo_idx, req, *data), cleanup);
 
     cleanup:
         return err;
 }
 
-CB_Error_t CB_op_init_ext(MPI_Request *req, int rank, CB_OpType_t op_type, size_t algo_idx, CB_OperationData_t *data) {
+CB_Error_t CB_op_init_ext(int rank, int peer, CB_OpType_t op_type, size_t algo_idx, MPI_Request *req, CB_OperationData_t *data) {
     data->req = req;
     data->rank = rank;
+    data->peer = peer;
     data->op_type = op_type;
     data->algo_idx = algo_idx;
     data->t_start_ns = 0;
@@ -82,6 +83,7 @@ CB_Error_t CB_op_wait(CB_OperationData_t * const data) {
     MPI_CHECK(MPI_Wait(data->req, MPI_STATUS_IGNORE), cleanup);
 
     data->t_end_ns = getCurrentTimeNS();
+    data->req = NULL;
 
     cleanup:
         return err;
@@ -101,14 +103,6 @@ CB_Error_t CB_op_datatype_init(void) {
     CB_Error_t err = CB_SUCCESS;
 
     static_assert(sizeof(MPI_Request) == sizeof(uint64_t), "MPI_Request size mismatch");
-printf("offsets: req=%zu rank=%zu algo=%zu t_start=%zu t_wait=%zu t_end=%zu | total=%zu\n",
-    offsetof(CB_OperationData_t, req),
-    offsetof(CB_OperationData_t, rank),
-    offsetof(CB_OperationData_t, algo_idx),
-    offsetof(CB_OperationData_t, t_start_ns),
-    offsetof(CB_OperationData_t, t_wait_ns),
-    offsetof(CB_OperationData_t, t_end_ns),
-    sizeof(CB_OperationData_t));
 
     static const struct {
         MPI_Aint     offset;
@@ -116,6 +110,7 @@ printf("offsets: req=%zu rank=%zu algo=%zu t_start=%zu t_wait=%zu t_end=%zu | to
     } fields[] = {
         { offsetof(CB_OperationData_t, req),        MPI_UINT64_T }, /* MPI_Request* as opaque 8-byte value */
         { offsetof(CB_OperationData_t, rank),        MPI_INT },
+        { offsetof(CB_OperationData_t, peer),        MPI_INT },
         { offsetof(CB_OperationData_t, op_type),        MPI_INT },
         { offsetof(CB_OperationData_t, algo_idx),   MPI_UINT64_T },
         { offsetof(CB_OperationData_t, t_start_ns), MPI_UINT64_T },
@@ -160,7 +155,8 @@ CB_Error_t CB_op_pprint(const CB_OperationData_t * const data) {
 
     printf("=== CB Operation Data ===\n");
     printf("Operation  : %s\n", CB_optype_str(data->op_type));
-    printf("From rank  : %d\n", data->rank);
+    printf("Rank  : %d\n", data->rank);
+    printf("Peer  : %d\n", data->peer);
     printf("Algo index : %zu\n", data->algo_idx);
 
     if (data->req) {

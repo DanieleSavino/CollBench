@@ -27,7 +27,7 @@ CB_Error_t CB_dlist_init(CB_DistList_t **list, size_t init_size) {
         return err;
 }
 
-CB_Error_t CB_dlist_push(CB_DistList_t * const list, MPI_Request *req, int rank, CB_OpType_t op_type, size_t algo_idx, CB_OperationData_t **out) {
+CB_Error_t CB_dlist_push(CB_DistList_t * const list, int rank, int peer, CB_OpType_t op_type, size_t algo_idx, MPI_Request *req, CB_OperationData_t **out) {
     size_t buff_size = list->_buff_size;
     size_t list_len = list->len;
 
@@ -40,7 +40,7 @@ CB_Error_t CB_dlist_push(CB_DistList_t * const list, MPI_Request *req, int rank,
         list->_buff_size *= 2;
     }
 
-    CB_op_init_ext(req, rank, op_type, algo_idx, &list->_buffer[list_len]);
+    CB_op_init_ext(rank, peer, op_type, algo_idx, req, &list->_buffer[list_len]);
     *out = &list->_buffer[list_len];
     list->len++;
 

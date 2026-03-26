@@ -25,6 +25,7 @@ CB_Error_t CB_dlist_export_json(const CB_DistList_t *list, const char *path) {
             "      \"index\":       %zu,\n"
             "      \"operation_type\":        \"%s\",\n"
             "      \"rank\":        %d,\n"
+            "      \"peer\":        %d,\n"
             "      \"algo_idx\":    %zu,\n"
             "      \"t_start_ns\":  %"PRIu64",\n"
             "      \"t_wait_ns\":   %"PRIu64",\n"
@@ -35,6 +36,7 @@ CB_Error_t CB_dlist_export_json(const CB_DistList_t *list, const char *path) {
             i,
             CB_optype_str(op->op_type),
             op->rank,
+            op->peer,
             op->algo_idx,
             op->t_start_ns,
             op->t_wait_ns,

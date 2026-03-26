@@ -1,8 +1,10 @@
 .cache/
+.venv/
 build/
 obj/
 
 *.a
 *.o
 
-compile_commands.json
+*.json
+*.png
