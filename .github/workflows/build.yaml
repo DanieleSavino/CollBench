@@ -1,0 +1,67 @@
+name: Build CollBench
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Static Library
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential libopenmpi-dev
+
+      - name: Build library
+        run: make
+
+      - name: Show output files
+        run: ls -R build || echo "No build output found"
+
+      - name: Clean build
+        run: make clean
+
+  release:
+    name: Release Build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential libopenmpi-dev zip
+
+      - name: Build library
+        run: make
+
+      - name: Package release files
+        run: |
+          mkdir -p release/include release/lib
+          cp -r include/* release/include/
+          cp build/lib/libcollbench.a release/lib/
+          zip -r collbench-${{ github.ref_name }}.zip release
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: collbench-${{ github.ref_name }}
+          path: collbench-${{ github.ref_name }}.zip
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: collbench-${{ github.ref_name }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,64 @@
+# ── Compiler ─────────────────────────────────────────────────────────────────
+CC := mpicc
+
+# ── Directories ───────────────────────────────────────────────────────────────
+BUILD_DIR := build
+BIN_DIR   := $(BUILD_DIR)/bin
+
+# ── CollBench root (relative to each demo dir) ────────────────────────────────
+CB_ROOT ?= ../..
+
+# ── Target ────────────────────────────────────────────────────────────────────
+DEMO_NAME ?= $(notdir $(CURDIR))
+BIN_TARGET := $(BIN_DIR)/$(DEMO_NAME)
+
+# ── Flags ─────────────────────────────────────────────────────────────────────
+COMMON_FLAGS := -Wall -Wextra -Wpedantic -I$(CB_ROOT)/include
+
+DEBUG_FLAGS   := $(COMMON_FLAGS) -O0 -g3 -DDEBUG
+RELEASE_FLAGS := $(COMMON_FLAGS) -O3 -march=native -DNDEBUG
+
+BUILD ?= release
+
+ifeq ($(BUILD), debug)
+    CFLAGS := $(DEBUG_FLAGS)
+    SUFFIX := _debug
+else ifeq ($(BUILD), release)
+    CFLAGS := $(RELEASE_FLAGS)
+    SUFFIX :=
+else
+    $(error Unknown BUILD mode: $(BUILD). Use BUILD=debug or BUILD=release)
+endif
+
+ifdef PROFILE
+    CFLAGS += -DCB_PROFILE
+endif
+
+CB_LIB := $(CB_ROOT)/build/lib/libcollbench$(SUFFIX).a
+
+# ── Phony targets ─────────────────────────────────────────────────────────────
+.PHONY: all debug release clean
+
+all: $(BIN_TARGET)
+
+debug:
+	$(MAKE) BUILD=debug all
+
+release:
+	$(MAKE) BUILD=release all
+
+# ── Build lib if needed ───────────────────────────────────────────────────────
+$(CB_LIB):
+	$(MAKE) -C $(CB_ROOT) BUILD=$(BUILD) lib
+
+# ── Binary ────────────────────────────────────────────────────────────────────
+$(BIN_TARGET): main.c $(CB_LIB) | $(BIN_DIR)
+	$(CC) $(CFLAGS) $^ -o $@ -lm
+
+# ── Directory creation ────────────────────────────────────────────────────────
+$(BIN_DIR):
+	mkdir -p $@
+
+# ── Clean ─────────────────────────────────────────────────────────────────────
+clean:
+	rm -rf $(BUILD_DIR)

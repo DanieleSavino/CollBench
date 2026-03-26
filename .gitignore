@@ -1,5 +1,10 @@
+.cache/
+.venv/
 build/
 obj/
 
 *.a
 *.o
+
+*.json
+*.png
