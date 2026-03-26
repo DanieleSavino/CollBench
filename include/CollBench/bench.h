@@ -6,6 +6,9 @@
 #include <time.h>
 #include "errors.h"
 
+extern MPI_Datatype _CB_op_datatype;
+#define CB_OP_DATATYPE (_CB_op_datatype)
+
 typedef struct {
     MPI_Request *req;
     size_t algo_idx;
@@ -22,18 +25,21 @@ CB_Error_t CB_op_wait(CB_OperationData_t * const data);
 CB_Error_t CB_op_end(CB_OperationData_t * const data);
 CB_Error_t CB_op_pprint(const CB_OperationData_t * const data);
 
-#define CB_OP_WRAP_BLOCKING(algo_idx, call, ref_data)      \
+CB_Error_t CB_op_datatype_init(void);
+CB_Error_t CB_op_datatype_free(void);
+
+#define CB_OP_WRAP_BLOCKING(algo_idx, call, ref_data, label)      \
 do {                                                              \
-    CB_op_init(NULL, algo_idx, ref_data);                   \
+    CB_op_init(NULL, algo_idx, ref_data);                         \
     CB_op_begin(*ref_data);                                       \
-    MPI_CHECK(call);                                                         \
+    MPI_CHECK(call, label);                                       \
     CB_op_end(*ref_data);                                         \
 } while(0)
 
-#define CB_OP_WRAP_NONBLOCKING(algo_idx, call, ref_data, req_ref) \
+#define CB_OP_WRAP_NONBLOCKING(algo_idx, call, ref_data, req_ref, label) \
 do {                                                                     \
-    CB_op_init(&req_ref, algo_idx, ref_data);                       \
-    CB_op_begin(*ref_data);                                               \
-    MPI_CHECK(call);                                                         \
-    CB_op_wait(*ref_data);                                                \
+    CB_op_init(&req_ref, algo_idx, ref_data);                            \
+    CB_op_begin(*ref_data);                                              \
+    MPI_CHECK(call, label);                                              \
+    CB_op_wait(*ref_data);                                               \
 } while(0)

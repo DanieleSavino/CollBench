@@ -4,6 +4,8 @@
 #include <inttypes.h>
 #include <mpi.h>
 
+MPI_Datatype _CB_op_datatype = MPI_DATATYPE_NULL;
+
 static inline uint64_t getCurrentTimeNS(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -11,14 +13,13 @@ static inline uint64_t getCurrentTimeNS(void) {
 }
 
 CB_Error_t CB_op_init(MPI_Request *req, size_t algo_idx, CB_OperationData_t **data) {
-    *data = (CB_OperationData_t*)malloc(sizeof(CB_OperationData_t));
-    if(! (*data)) {
-        return CB_ERR_OUT_OF_MEM;
-    }
+    CB_Error_t err = CB_SUCCESS;
+    CB_MALLOC(*data, sizeof(CB_OperationData_t), cleanup);
 
-    CB_op_init_ext(req, algo_idx, *data);
+    CB_CHECK(CB_op_init_ext(req, algo_idx, *data), cleanup);
 
-    return CB_SUCCESS;
+    cleanup:
+        return err;
 }
 
 CB_Error_t CB_op_init_ext(MPI_Request *req, size_t algo_idx, CB_OperationData_t *data) {
@@ -52,17 +53,20 @@ CB_Error_t CB_op_begin(CB_OperationData_t * const data) {
 }
 
 CB_Error_t CB_op_wait(CB_OperationData_t * const data) {
+    CB_Error_t err = CB_SUCCESS;
+
     if(!data) {
         return CB_ERR_NULLPTR;
     }
 
     data->t_wait_ns = getCurrentTimeNS();
 
-    MPI_CHECK(MPI_Wait(data->req, MPI_STATUS_IGNORE));
+    MPI_CHECK(MPI_Wait(data->req, MPI_STATUS_IGNORE), cleanup);
 
     data->t_end_ns = getCurrentTimeNS();
 
-    return CB_SUCCESS;
+    cleanup:
+        return err;
 }
 
 CB_Error_t CB_op_end(CB_OperationData_t * const data) {
@@ -73,6 +77,50 @@ CB_Error_t CB_op_end(CB_OperationData_t * const data) {
     data->t_end_ns = getCurrentTimeNS();
 
     return CB_SUCCESS;
+}
+
+CB_Error_t CB_op_datatype_init(void) {
+    CB_Error_t err = CB_SUCCESS;
+
+    static const struct {
+        MPI_Aint     offset;
+        MPI_Datatype type;
+    } fields[] = {
+        { offsetof(CB_OperationData_t, req),        MPI_UINT64_T }, /* MPI_Request* as opaque 8-byte value */
+        { offsetof(CB_OperationData_t, algo_idx),   MPI_UINT64_T },
+        { offsetof(CB_OperationData_t, t_start_ns), MPI_UINT64_T },
+        { offsetof(CB_OperationData_t, t_wait_ns),  MPI_UINT64_T },
+        { offsetof(CB_OperationData_t, t_end_ns),   MPI_UINT64_T },
+    };
+
+    enum { NFIELDS = sizeof(fields) / sizeof(fields[0]) };
+
+    int          lengths[NFIELDS];
+    MPI_Aint     displacements[NFIELDS];
+    MPI_Datatype types[NFIELDS];
+
+    for (int i = 0; i < NFIELDS; i++) {
+        lengths[i]       = 1;
+        displacements[i] = fields[i].offset;
+        types[i]         = fields[i].type;
+    }
+
+    MPI_Datatype tmp;
+    MPI_CHECK(MPI_Type_create_struct(NFIELDS, lengths, displacements, types, &tmp), cleanup);
+    MPI_CHECK(MPI_Type_create_resized(tmp, 0, sizeof(CB_OperationData_t), &_CB_op_datatype), cleanup);
+    MPI_CHECK(MPI_Type_free(&tmp), cleanup);
+    MPI_CHECK(MPI_Type_commit(&_CB_op_datatype), cleanup);
+
+    cleanup:
+        return err;
+}
+
+CB_Error_t CB_op_datatype_free(void) {
+    CB_Error_t err = CB_SUCCESS;
+    MPI_CHECK(MPI_Type_free(&_CB_op_datatype), cleanup);
+
+    cleanup:
+        return err;
 }
 
 CB_Error_t CB_op_pprint(const CB_OperationData_t * const data) {

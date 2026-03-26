@@ -4,7 +4,7 @@
 #include "errors.h"
 #include <stddef.h>
 
-#define CB_INIT_SIZE 10
+#define CB_DEF_INIT_SIZE 10
 
 typedef struct {
     CB_OperationData_t *_buffer;
@@ -21,20 +21,22 @@ CB_Error_t CB_dlist_free(CB_DistList_t * const list);
 
 CB_Error_t CB_dlist_pprint(const CB_DistList_t * const list);
 
-#define CB_OP_LWRAP_BLOCKING(list, algo_idx, call)        \
-do {                                                      \
-    CB_OperationData_t *data;                             \
-    CB_CHECK(CB_dlist_push(list, NULL, algo_idx, &data)); \
-    CB_op_begin(data);                                    \
-    MPI_CHECK(call);                                      \
-    CB_op_end(data);                                      \
+CB_Error_t CB_dlist_gather(const CB_DistList_t * const list, MPI_Comm comm, int root, CB_DistList_t **out);
+
+#define CB_OP_LWRAP_BLOCKING(list, algo_idx, call, label)        \
+do {                                                              \
+    CB_OperationData_t *data;                                     \
+    CB_CHECK(CB_dlist_push(list, NULL, algo_idx, &data), label);  \
+    CB_op_begin(data);                                            \
+    MPI_CHECK(call, label);                                       \
+    CB_op_end(data);                                              \
 } while(0)
 
-#define CB_OP_LWRAP_NONBLOCKING(list, algo_idx, call, req_ref)        \
-do {                                                                   \
-    CB_OperationData_t *data;                                          \
-    CB_CHECK(CB_dlist_push(list, &(req_ref), algo_idx, &data));        \
-    CB_op_begin(data);                                                 \
-    MPI_CHECK(call);                                                   \
-    CB_op_wait(data);                                                  \
+#define CB_OP_LWRAP_NONBLOCKING(list, algo_idx, call, req_ref, label)        \
+do {                                                                          \
+    CB_OperationData_t *data;                                                 \
+    CB_CHECK(CB_dlist_push(list, &(req_ref), algo_idx, &data), label);        \
+    CB_op_begin(data);                                                        \
+    MPI_CHECK(call, label);                                                   \
+    CB_op_wait(data);                                                         \
 } while(0)

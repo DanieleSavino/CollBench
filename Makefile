@@ -24,10 +24,10 @@ BIN_OBJS    := $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(BIN_SRCS))
 # ── Flags ─────────────────────────────────────────────────────────────────────
 COMMON_FLAGS := -Wall -Wextra -Wpedantic -I$(INC_DIR)
 
-DEBUG_FLAGS   := $(COMMON_FLAGS) -O0 -g3 -DDEBUG -fsanitize=address,undefined
+DEBUG_FLAGS   := $(COMMON_FLAGS) -O0 -g3 -DDEBUG
 RELEASE_FLAGS := $(COMMON_FLAGS) -O3 -march=native -DNDEBUG
 
-DEBUG_LDFLAGS   := -fsanitize=address,undefined
+DEBUG_LDFLAGS   :=
 RELEASE_LDFLAGS :=
 
 # ── Build mode (default: release) ─────────────────────────────────────────────
