@@ -27,8 +27,8 @@ COMMON_FLAGS := -Wall -Wextra -Wpedantic -I$(INC_DIR)
 DEBUG_FLAGS   := $(COMMON_FLAGS) -O0 -g3 -DDEBUG
 RELEASE_FLAGS := $(COMMON_FLAGS) -O3 -march=native -DNDEBUG
 
-DEBUG_LDFLAGS   :=
-RELEASE_LDFLAGS :=
+DEBUG_LDFLAGS   := -lm
+RELEASE_LDFLAGS := -lm
 
 # ── Build mode (default: release) ─────────────────────────────────────────────
 BUILD ?= release

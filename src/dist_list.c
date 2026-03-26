@@ -9,11 +9,12 @@
 #include <time.h>
 
 CB_Error_t CB_dlist_init(CB_DistList_t **list, size_t init_size) {
-    CB_DistList_t *der_list = malloc(sizeof(CB_DistList_t));
-    if(!der_list) goto oom_list;
+    CB_Error_t err = CB_SUCCESS;
 
-    der_list->_buffer = malloc(init_size * sizeof(CB_OperationData_t));
-    if(!der_list->_buffer) goto oom_buff;
+    CB_DistList_t *der_list = NULL;
+    CB_MALLOC(der_list, sizeof(CB_DistList_t), cleanup);
+
+    CB_MALLOC(der_list->_buffer, init_size * sizeof(CB_OperationData_t), cleanup);
 
     der_list->_buff_size = init_size;
     der_list->len = 0;
@@ -21,13 +22,12 @@ CB_Error_t CB_dlist_init(CB_DistList_t **list, size_t init_size) {
 
     return CB_SUCCESS;
 
-    oom_buff:
+    cleanup:
         free(der_list);
-    oom_list:
-        return CB_ERR_OUT_OF_MEM;
+        return err;
 }
 
-CB_Error_t CB_dlist_push(CB_DistList_t * const list, MPI_Request *req, size_t algo_idx, CB_OperationData_t **out) {
+CB_Error_t CB_dlist_push(CB_DistList_t * const list, MPI_Request *req, int rank, CB_OpType_t op_type, size_t algo_idx, CB_OperationData_t **out) {
     size_t buff_size = list->_buff_size;
     size_t list_len = list->len;
 
@@ -40,7 +40,7 @@ CB_Error_t CB_dlist_push(CB_DistList_t * const list, MPI_Request *req, size_t al
         list->_buff_size *= 2;
     }
 
-    CB_op_init_ext(req, algo_idx, &list->_buffer[list_len]);
+    CB_op_init_ext(req, rank, op_type, algo_idx, &list->_buffer[list_len]);
     *out = &list->_buffer[list_len];
     list->len++;
 
@@ -60,6 +60,8 @@ CB_Error_t CB_dlist_get(const CB_DistList_t *const list, size_t idx, CB_Operatio
 }
 
 CB_Error_t CB_dlist_pop(CB_DistList_t * const list, CB_OperationData_t **out) {
+    CB_Error_t err = CB_SUCCESS;
+
     CB_OperationData_t *buffer = list->_buffer;
     size_t list_len = list->len;
 
@@ -68,7 +70,8 @@ CB_Error_t CB_dlist_pop(CB_DistList_t * const list, CB_OperationData_t **out) {
     }
 
     if(out != NULL) {
-        CB_OperationData_t *data = malloc(sizeof(CB_OperationData_t));
+        CB_OperationData_t *data = NULL;
+        CB_MALLOC(data, sizeof(CB_OperationData_t), cleanup);
         if(!data) {
             return CB_ERR_OUT_OF_MEM;
         }
@@ -79,7 +82,8 @@ CB_Error_t CB_dlist_pop(CB_DistList_t * const list, CB_OperationData_t **out) {
 
     list->len--;
 
-    return CB_SUCCESS;
+    cleanup:
+        return err;
 }
 
 CB_Error_t CB_dlist_free(CB_DistList_t * const list) {

@@ -9,16 +9,32 @@
 extern MPI_Datatype _CB_op_datatype;
 #define CB_OP_DATATYPE (_CB_op_datatype)
 
+typedef enum {
+    CB_OP_SEND,
+    CB_OP_RECV,
+    CB_OP_BCAST,
+    CB_OP_REDUCE,
+    CB_OP_ALLREDUCE,
+    CB_OP_SCATTER,
+    CB_OP_GATHER,
+    CB_OP_ALLGATHER,
+    CB_OP_ALLTOALL,
+} CB_OpType_t;
+
+const char* CB_optype_str(CB_OpType_t op_type);
+
 typedef struct {
     MPI_Request *req;
+    int rank;
+    CB_OpType_t op_type;
     size_t algo_idx;
     uint64_t t_start_ns;
     uint64_t t_wait_ns;
     uint64_t t_end_ns;
 } CB_OperationData_t;
 
-CB_Error_t CB_op_init(MPI_Request *req, size_t algo_idx, CB_OperationData_t **data);
-CB_Error_t CB_op_init_ext(MPI_Request *req, size_t algo_idx, CB_OperationData_t *data);
+CB_Error_t CB_op_init(MPI_Request *req, int rank, CB_OpType_t op_type, size_t algo_idx, CB_OperationData_t **data);
+CB_Error_t CB_op_init_ext(MPI_Request *req, int rank, CB_OpType_t op_type, size_t algo_idx, CB_OperationData_t *data);
 CB_Error_t CB_op_free(CB_OperationData_t * const data);
 CB_Error_t CB_op_begin(CB_OperationData_t * const data);
 CB_Error_t CB_op_wait(CB_OperationData_t * const data);

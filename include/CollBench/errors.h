@@ -9,6 +9,8 @@ typedef enum {
     CB_ERR_OUT_OF_BOUNDS,
     CB_ERR_NULLPTR,
     CB_ERR_INT_OF,
+    CB_ERR_IO,
+    CB_ERR_INVALID_ARG,
     CB_ERR_MPI,
 } CB_Error_t;
 

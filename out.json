@@ -1,0 +1,159 @@
+{
+  "count": 14,
+  "operations": [
+    {
+      "index":       0,
+      "operation_type":        "send",
+      "rank":        0,
+      "algo_idx":    0,
+      "t_start_ns":  9655407070302,
+      "t_wait_ns":   9655407195594,
+      "t_end_ns":    9655407199691,
+      "t_issue_ns":  125292,
+      "t_total_ns":  129389
+    },
+    {
+      "index":       1,
+      "operation_type":        "send",
+      "rank":        0,
+      "algo_idx":    1,
+      "t_start_ns":  9655407200364,
+      "t_wait_ns":   9655407247104,
+      "t_end_ns":    9655407247839,
+      "t_issue_ns":  46740,
+      "t_total_ns":  47475
+    },
+    {
+      "index":       2,
+      "operation_type":        "send",
+      "rank":        0,
+      "algo_idx":    2,
+      "t_start_ns":  9655407248223,
+      "t_wait_ns":   9655407286764,
+      "t_end_ns":    9655407287190,
+      "t_issue_ns":  38541,
+      "t_total_ns":  38967
+    },
+    {
+      "index":       3,
+      "operation_type":        "recv",
+      "rank":        1,
+      "algo_idx":    2,
+      "t_start_ns":  9655407204302,
+      "t_wait_ns":   9655407308568,
+      "t_end_ns":    9655407336244,
+      "t_issue_ns":  104266,
+      "t_total_ns":  131942
+    },
+    {
+      "index":       4,
+      "operation_type":        "recv",
+      "rank":        2,
+      "algo_idx":    2,
+      "t_start_ns":  9655407121790,
+      "t_wait_ns":   9655407208556,
+      "t_end_ns":    9655407313344,
+      "t_issue_ns":  86766,
+      "t_total_ns":  191554
+    },
+    {
+      "index":       5,
+      "operation_type":        "recv",
+      "rank":        3,
+      "algo_idx":    0,
+      "t_start_ns":  9655407039290,
+      "t_wait_ns":   9655407164134,
+      "t_end_ns":    9655407219953,
+      "t_issue_ns":  124844,
+      "t_total_ns":  180663
+    },
+    {
+      "index":       6,
+      "operation_type":        "send",
+      "rank":        3,
+      "algo_idx":    1,
+      "t_start_ns":  9655407220504,
+      "t_wait_ns":   9655407260488,
+      "t_end_ns":    9655407261398,
+      "t_issue_ns":  39984,
+      "t_total_ns":  40894
+    },
+    {
+      "index":       7,
+      "operation_type":        "send",
+      "rank":        3,
+      "algo_idx":    2,
+      "t_start_ns":  9655407261919,
+      "t_wait_ns":   9655407293140,
+      "t_end_ns":    9655407294047,
+      "t_issue_ns":  31221,
+      "t_total_ns":  32128
+    },
+    {
+      "index":       8,
+      "operation_type":        "recv",
+      "rank":        4,
+      "algo_idx":    1,
+      "t_start_ns":  9655407209065,
+      "t_wait_ns":   9655407297017,
+      "t_end_ns":    9655407319802,
+      "t_issue_ns":  87952,
+      "t_total_ns":  110737
+    },
+    {
+      "index":       9,
+      "operation_type":        "send",
+      "rank":        4,
+      "algo_idx":    2,
+      "t_start_ns":  9655407320431,
+      "t_wait_ns":   9655407358129,
+      "t_end_ns":    9655407358752,
+      "t_issue_ns":  37698,
+      "t_total_ns":  38321
+    },
+    {
+      "index":       10,
+      "operation_type":        "recv",
+      "rank":        5,
+      "algo_idx":    2,
+      "t_start_ns":  9655407041873,
+      "t_wait_ns":   9655407177552,
+      "t_end_ns":    9655407388166,
+      "t_issue_ns":  135679,
+      "t_total_ns":  346293
+    },
+    {
+      "index":       11,
+      "operation_type":        "recv",
+      "rank":        6,
+      "algo_idx":    2,
+      "t_start_ns":  9655407075229,
+      "t_wait_ns":   9655407184443,
+      "t_end_ns":    9655407367585,
+      "t_issue_ns":  109214,
+      "t_total_ns":  292356
+    },
+    {
+      "index":       12,
+      "operation_type":        "recv",
+      "rank":        7,
+      "algo_idx":    1,
+      "t_start_ns":  9655407086776,
+      "t_wait_ns":   9655407171620,
+      "t_end_ns":    9655407293691,
+      "t_issue_ns":  84844,
+      "t_total_ns":  206915
+    },
+    {
+      "index":       13,
+      "operation_type":        "send",
+      "rank":        7,
+      "algo_idx":    2,
+      "t_start_ns":  9655407294422,
+      "t_wait_ns":   9655407344780,
+      "t_end_ns":    9655407345681,
+      "t_issue_ns":  50358,
+      "t_total_ns":  51259
+    }
+  ]
+}
