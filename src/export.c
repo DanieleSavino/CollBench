@@ -1,6 +1,8 @@
 #include "CollBench/export.h"
 #include "CollBench/bench.h"
 #include "CollBench/errors.h"
+#include <asm-generic/errno-base.h>
+#include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <time.h>
@@ -23,7 +25,11 @@ static CB_Error_t CB_mkdir_p(const char *path) {
         }
     }
 
-    return mkdir(buf, 0755) ? CB_ERR_IO : CB_SUCCESS;
+    if(mkdir(buf, 0755) && errno != EEXIST) {
+        return CB_ERR_IO;
+    }
+
+    return CB_SUCCESS;
 }
 
 CB_Error_t CB_dlist_export_json(const CB_DistList_t *list, const char *path) {
