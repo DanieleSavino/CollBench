@@ -1,11 +1,36 @@
 #include "CollBench/export.h"
 #include "CollBench/bench.h"
+#include "CollBench/errors.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <time.h>
+#include <sys/stat.h>
+#include <string.h>
+#include <libgen.h>
+
+static CB_Error_t CB_mkdir_p(const char *path) {
+    char tmp[256];
+    strncpy(tmp, path, sizeof(tmp) - 1);
+    char *dir = dirname(tmp);
+    if (strcmp(dir, ".") == 0 || strcmp(dir, "/") == 0) return 0;
+    char buf[256];
+    strncpy(buf, dir, sizeof(buf) - 1);
+    for (char *p = buf + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            mkdir(buf, 0755);
+            *p = '/';
+        }
+    }
+
+    return mkdir(buf, 0755) ? CB_ERR_IO : CB_SUCCESS;
+}
 
 CB_Error_t CB_dlist_export_json(const CB_DistList_t *list, const char *path) {
+    CB_Error_t err = CB_SUCCESS;
+
     if (!list || !path) return CB_ERR_INVALID_ARG;
+    CB_CHECK(CB_mkdir_p(path), ret);
 
     FILE *f = fopen(path, "w");
     if (!f) return CB_ERR_IO;
@@ -49,5 +74,7 @@ CB_Error_t CB_dlist_export_json(const CB_DistList_t *list, const char *path) {
 
     fprintf(f, "  ]\n}\n");
     fclose(f);
-    return CB_SUCCESS;
+
+    ret:
+        return err;
 }
