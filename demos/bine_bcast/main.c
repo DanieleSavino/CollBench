@@ -3,6 +3,7 @@
 #include "CollBench/init.h"
 #include <math.h>
 #include <mpi.h>
+#include <stdlib.h>
 
 static inline int rank2nb(int32_t rank, int bits) {
     const int size = (1 << bits);

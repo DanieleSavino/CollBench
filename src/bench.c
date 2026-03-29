@@ -1,6 +1,7 @@
 #include "CollBench/bench.h"
 #include "CollBench/errors.h"
 #include <assert.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <inttypes.h>
 #include <mpi.h>
@@ -86,6 +87,32 @@ CB_Error_t CB_op_wait(CB_OperationData_t * const data) {
     data->req = NULL;
 
     cleanup:
+        return err;
+}
+
+CB_Error_t CB_op_waitall(CB_OperationData_t * const buff, size_t buff_len) {
+    CB_Error_t err = CB_SUCCESS;
+    if (!buff) {
+        return CB_ERR_NULLPTR;
+    }
+
+    MPI_Request *reqs;
+    CB_MALLOC(reqs, buff_len * sizeof(MPI_Request), cleanup);
+
+    for (size_t i = 0; i < buff_len; i++) {
+        buff[i].t_wait_ns = getCurrentTimeNS();
+        reqs[i] = buff[i].req ? *buff[i].req : MPI_REQUEST_NULL;
+    }
+
+    for (size_t completed = 0; completed < buff_len; completed++) {
+        int idx;
+        MPI_CHECK(MPI_Waitany(buff_len, reqs, &idx, MPI_STATUS_IGNORE), cleanup);
+        if (idx == MPI_UNDEFINED) break;
+        buff[idx].t_end_ns = getCurrentTimeNS();
+    }
+
+    cleanup:
+        free(reqs);
         return err;
 }
 
