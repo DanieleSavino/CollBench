@@ -59,6 +59,28 @@ CB_Error_t CB_dlist_get(const CB_DistList_t *const list, size_t idx, CB_Operatio
     return CB_SUCCESS;
 }
 
+CB_Error_t CB_dlist_getbyreq(const CB_DistList_t *list, MPI_Request *req, CB_OperationData_t **out) {
+    CB_Error_t err;
+
+    if (!out || !list || !req) {
+        return CB_ERR_NULLPTR;
+    }
+    for (size_t i = 0; i < list->len; i++) {
+        CB_OperationData_t *data;
+        CB_CHECK(CB_dlist_get(list, i, &data), cleanup);
+        if (err != CB_SUCCESS) return err;
+        if (data->req == req) {
+            *out = data;
+            return CB_SUCCESS;
+        }
+    }
+    err = CB_ERR_INVALID_ARG;
+    *out = NULL;
+
+    cleanup:
+        return err;
+}
+
 CB_Error_t CB_dlist_pop(CB_DistList_t * const list, CB_OperationData_t **out) {
     CB_Error_t err = CB_SUCCESS;
 
