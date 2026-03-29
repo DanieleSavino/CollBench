@@ -3,9 +3,8 @@
 #include "CollBench/init.h"
 #include <math.h>
 #include <mpi.h>
-#include <stdlib.h>
 
-static inline int rank2nb(int32_t rank, int bits) {
+int rank2nb(int32_t rank, int bits) {
     const int size = (1 << bits);
     if(rank > 0x55555555) return -1;
 
@@ -15,14 +14,14 @@ static inline int rank2nb(int32_t rank, int bits) {
     return val & (size - 1);
 }
 
-static inline int nb2rank(int32_t nb, int bits) {
+int nb2rank(int32_t nb, int bits) {
     const int size = (1 << bits);
     const uint32_t mask = 0xAAAAAAAA;
     const int32_t val = (mask ^ nb) - mask;
     return val & (size - 1);
 }
 
-static inline int mod(int a, int b){
+int mod(int a, int b){
     int r = a % b;
     return r < 0 ? r + b : r;
 }
@@ -71,8 +70,6 @@ int bine_bcast_dhlv(void *buffer, int count, MPI_Datatype datatype, int root, MP
     return MPI_SUCCESS;
 }
 
-#define ARR_LEN 100
-
 int main(int argc, char **argv) {
     CB_Error_t err = CB_SUCCESS;
     MPI_Init(&argc, &argv);
@@ -83,16 +80,16 @@ int main(int argc, char **argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     int *buff;
-    CB_MALLOC(buff, sizeof(int) * ARR_LEN, cleanup);
-    for(int i = 0; i < ARR_LEN; i++) {
+    CB_MALLOC(buff, sizeof(int) * 10, cleanup);
+    for(int i = 0; i < 10; i++) {
         buff[i] = rank == 0 ? i : 0;
     }
 
-    bine_bcast_dhlv(buff, ARR_LEN, MPI_INT, 0, MPI_COMM_WORLD);
+    bine_bcast_dhlv(buff, 10, MPI_INT, 0, MPI_COMM_WORLD);
 
-    for(int i = 0; i < ARR_LEN; i++) {
+    for(int i = 0; i < 10; i++) {
         if(buff[i] != i) {
-            MPI_Abort(MPI_COMM_WORLD, 1);
+            MPI_Abort(MPI_COMM_WORLD, 10);
         }
     }
 
