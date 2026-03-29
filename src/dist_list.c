@@ -62,6 +62,8 @@ CB_Error_t CB_dlist_get(const CB_DistList_t *const list, size_t idx, CB_Operatio
 CB_Error_t CB_dlist_getbyreq(const CB_DistList_t *list, MPI_Request *req, CB_OperationData_t **out) {
     CB_Error_t err;
 
+    printf("Requested data from request: %p\n", (void*)req);
+
     if (!out || !list || !req) {
         return CB_ERR_NULLPTR;
     }

@@ -40,7 +40,7 @@ CB_Error_t CB_op_init_ext(int rank, int peer, CB_OpType_t op_type, size_t algo_i
 CB_Error_t CB_op_free(CB_OperationData_t * const data);
 CB_Error_t CB_op_begin(CB_OperationData_t * const data);
 CB_Error_t CB_op_wait(CB_OperationData_t * const data);
-CB_Error_t CB_op_waitall(CB_OperationData_t * const buff, size_t buff_len);
+CB_Error_t CB_op_waitall(CB_OperationData_t ** const buff, size_t buff_len);
 CB_Error_t CB_op_end(CB_OperationData_t * const data);
 CB_Error_t CB_op_pprint(const CB_OperationData_t * const data);
 

@@ -63,28 +63,29 @@ CB_Error_t CB_dlist_gather(const CB_DistList_t * const list, MPI_Comm comm, int 
 
 #define CB_ILSEND(rank, algo_idx, buff, count, datatype, dest, tag, comm, req_ref)              \
     do {                                                                                         \
+        MPI_Request *req = req_ref; \
         CB_OperationData_t *data;                                                                \
-        CB_CHECK(CB_dlist_push(_list, rank, dest, CB_OP_SEND, algo_idx, req_ref, &data),        \
+        CB_CHECK(CB_dlist_push(_list, rank, dest, CB_OP_SEND, algo_idx, req, &data),        \
             _CB_cleanup_label);                                                                  \
         CB_op_begin(data);                                                                       \
-        MPI_Isend(buff, count, datatype, dest, tag, comm, req_ref);                             \
+        MPI_Isend(buff, count, datatype, dest, tag, comm, req);                             \
     } while(0)
 
 #define CB_ILRECV(rank, algo_idx, buff, count, datatype, source, tag, comm, req_ref)            \
     do {                                                                                         \
+        MPI_Request *req = req_ref; \
         CB_OperationData_t *data;                                                                \
-        CB_CHECK(CB_dlist_push(_list, rank, source, CB_OP_RECV, algo_idx, req_ref, &data),      \
+        CB_CHECK(CB_dlist_push(_list, rank, source, CB_OP_RECV, algo_idx, req, &data),      \
             _CB_cleanup_label);                                                                  \
         CB_op_begin(data);                                                                       \
-        MPI_Irecv(buff, count, datatype, source, tag, comm, req_ref);                           \
+        MPI_CHECK(MPI_Irecv(buff, count, datatype, source, tag, comm, req), _CB_cleanup_label);                           \
     } while(0)
 
 #define CB_LWAIT(req_ref)                                                                        \
     do {                                                                                         \
         CB_OperationData_t *data;                                                                \
-        CB_dlist_getbyreq(_list, *(req_ref), &data);                                            \
+        CB_CHECK(CB_dlist_getbyreq(_list, req_ref, &data), _CB_cleanup_label);                                            \
         CB_op_wait(data);                                                                        \
-        MPI_CHECK(MPI_Wait(req_ref, MPI_STATUS_IGNORE), _CB_cleanup_label);                     \
     } while(0)
 
 #define CB_LWAITALL(reqs, buff_len)                                                              \
@@ -92,7 +93,9 @@ CB_Error_t CB_dlist_gather(const CB_DistList_t * const list, MPI_Comm comm, int 
         CB_OperationData_t **buff;                                                               \
         CB_MALLOC(buff, (buff_len) * sizeof(CB_OperationData_t *), _CB_cleanup_label);          \
         for (int i = 0; i < (buff_len); i++) {                                                  \
-            CB_dlist_getbyreq(_list, (reqs)[i], &buff[i]);                                      \
+            CB_OperationData_t *data; \
+            CB_CHECK(CB_dlist_getbyreq(_list, &(reqs)[i], &data), _CB_cleanup_label);                                      \
+            buff[i] = data; \
         }                                                                                        \
         CB_op_waitall(buff, buff_len);                                                           \
         free(buff);                                                                              \
