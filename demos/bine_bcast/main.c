@@ -65,33 +65,47 @@ int bine_bcast_dhlv(void *buffer, int count, MPI_Datatype datatype, int root, MP
         mask >>= 1;
     }
 
-    CB_COLL_END(comm, root, "bine_bcast.json");
+    CB_COLL_END(comm, rank, root, "bine_bcast.json");
 
     return MPI_SUCCESS;
 }
 
 int main(int argc, char **argv) {
-    CB_Error_t err = CB_SUCCESS;
     MPI_Init(&argc, &argv);
     CB_init();
 
-    int rank, size;
+    // int rank, size;
+    // MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    // MPI_Comm_size(MPI_COMM_WORLD, &size);
+    //
+    // int *buff;
+    // CB_MALLOC(buff, sizeof(int) * 10, cleanup);
+    // for(int i = 0; i < 10; i++) {
+    //     buff[i] = rank == 0 ? i : 0;
+    // }
+    //
+    // bine_bcast_dhlv(buff, 10, MPI_INT, 0, MPI_COMM_WORLD);
+    //
+    // for(int i = 0; i < 10; i++) {
+    //     if(buff[i] != i) {
+    //         MPI_Abort(MPI_COMM_WORLD, 10);
+    //     }
+    // }
+    //
+    CB_COLL_START();
+
+    int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    int *buff;
-    CB_MALLOC(buff, sizeof(int) * 10, cleanup);
-    for(int i = 0; i < 10; i++) {
-        buff[i] = rank == 0 ? i : 0;
-    }
+    char b = 'a';
+    MPI_Request reqs[2];
 
-    bine_bcast_dhlv(buff, 10, MPI_INT, 0, MPI_COMM_WORLD);
+    CB_ILSEND(rank, 0, &b, 1, MPI_CHAR, rank == 0 ? 1 : 0, 0, MPI_COMM_WORLD, &reqs[0]);
+    CB_ILRECV(rank, 0, &b, 1, MPI_CHAR, rank == 0 ? 1 : 0, 0, MPI_COMM_WORLD, &reqs[1]);
 
-    for(int i = 0; i < 10; i++) {
-        if(buff[i] != i) {
-            MPI_Abort(MPI_COMM_WORLD, 10);
-        }
-    }
+    CB_LWAITALL(reqs, 2);
+
+    CB_COLL_END(MPI_COMM_WORLD, rank, 0, "tmp.json");
 
     cleanup:
         CB_finalize();

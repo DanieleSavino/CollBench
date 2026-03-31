@@ -27,7 +27,7 @@ static inline CB_Error_t CB_finalize(void) {
     CB_DistList_t *_list = NULL, *_full_list = NULL; \
     CB_CHECK(CB_dlist_init(&_list, CB_DEF_INIT_SIZE), _CB_cleanup_label);
 
-#define CB_COLL_END(comm, root, out_path) \
+#define CB_COLL_END(comm, rank, root, out_path) \
     _CB_cleanup_label: \
         CB_CHECK(CB_dlist_gather(_list, comm, root, &_full_list), _CB_gather_failed); \
     _CB_gather_failed: \

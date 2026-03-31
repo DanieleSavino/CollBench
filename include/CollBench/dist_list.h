@@ -98,6 +98,11 @@ CB_Error_t CB_dlist_gather(const CB_DistList_t * const list, MPI_Comm comm, int 
             buff[i] = data; \
         }                                                                                        \
         CB_op_waitall(buff, buff_len);                                                           \
+        for (int i = 0; i < (buff_len); i++) {                                                  \
+            CB_OperationData_t *data; \
+            CB_CHECK(CB_dlist_getbyreq(_list, &(reqs)[i], &data), _CB_cleanup_label);                                      \
+            CB_op_pprint(data); \
+        }                                                                                        \
         free(buff);                                                                              \
     } while(0)
 
