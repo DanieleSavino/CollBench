@@ -90,7 +90,7 @@ CB_Error_t CB_op_wait(CB_OperationData_t * const data) {
         return err;
 }
 
-// INFO: Double ptr as the data buff is owned by the list, so makes it easier to rearrange stuff
+// NOTE: Double ptr as the data buff is owned by the list, so makes it easier to rearrange stuff
 CB_Error_t CB_op_waitall(CB_OperationData_t ** const buff, size_t buff_len) {
     CB_Error_t err = CB_SUCCESS;
     if (!buff) {
@@ -145,7 +145,7 @@ CB_Error_t CB_op_datatype_init(void) {
         MPI_Datatype type;
     } fields[] = {
         // FIXME: works only on 64-bit systems
-        { offsetof(CB_OperationData_t, req),        MPI_UINT64_T }, /* MPI_Request as opaque 8-byte value */
+        { offsetof(CB_OperationData_t, req),        MPI_UINT64_T }, /* MPI_Request as 8-byte ptr value */
         { offsetof(CB_OperationData_t, rank),        MPI_INT },
         { offsetof(CB_OperationData_t, peer),        MPI_INT },
         { offsetof(CB_OperationData_t, op_type),        MPI_INT },
@@ -155,6 +155,7 @@ CB_Error_t CB_op_datatype_init(void) {
         { offsetof(CB_OperationData_t, t_end_ns),   MPI_UINT64_T },
     };
 
+    // NOTE: This computes nfields at compile time (equivalent to templatge heavy programming in c++)
     enum { NFIELDS = sizeof(fields) / sizeof(fields[0]) };
 
     int          lengths[NFIELDS];
