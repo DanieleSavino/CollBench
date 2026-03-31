@@ -96,7 +96,7 @@ CB_Error_t CB_op_waitall(CB_OperationData_t ** const buff, size_t buff_len) {
         return CB_ERR_NULLPTR;
     }
 
-    MPI_Request *reqs;
+    MPI_Request *reqs = NULL;
     CB_MALLOC(reqs, buff_len * sizeof(MPI_Request), cleanup);
 
     for (size_t i = 0; i < buff_len; i++) {
@@ -104,12 +104,19 @@ CB_Error_t CB_op_waitall(CB_OperationData_t ** const buff, size_t buff_len) {
         reqs[i] = buff[i]->req ? *(buff[i]->req) : MPI_REQUEST_NULL;
     }
 
-    for (size_t completed = 0; completed < buff_len; completed++) {
-        int idx;
-        MPI_CHECK(MPI_Waitany(buff_len, reqs, &idx, MPI_STATUS_IGNORE), cleanup);
-        if (idx == MPI_UNDEFINED) break;
-        buff[idx]->t_end_ns = getCurrentTimeNS();
+    // FIXME: This sets the end time of all reqs to max time
+    MPI_CHECK(MPI_Waitall(buff_len, reqs, MPI_STATUSES_IGNORE), cleanup);
+    for(size_t i = 0; i < buff_len; i++) {
+        buff[i]->t_end_ns = getCurrentTimeNS();
     }
+
+    // TODO: Implement something like this (unsafe as waitany with null reqs is undefined behaviour)
+    // for (size_t completed = 0; completed < buff_len; completed++) {
+    //     int idx;
+    //     MPI_CHECK(MPI_Waitany(buff_len, reqs, &idx, MPI_STATUS_IGNORE), cleanup);
+    //     if (idx == MPI_UNDEFINED) break;
+    //     buff[idx]->t_end_ns = getCurrentTimeNS();
+    // }
 
     cleanup:
         free(reqs);
