@@ -263,11 +263,13 @@ CB_Error_t CB_dlist_gather(const CB_DistList_t * const list, MPI_Comm comm, int 
     do {                                                                                         \
         CB_OperationData_t *data;                                                                \
             \
-        // FIXME: If a request gets allocated, then freed without setting req to null \
-        // then mpi reuses that memory address there might be a conflict \
-        // this should mitigated by CB_op_wait setting req to MPI_REQUEST_NULL, but it's not 100% safe \
-        // this design choice is aimed at closely match the mpi api \
-        CB_CHECK(CB_dlist_getbyreq(_list, req_ref, &data), _CB_cleanup_label);                  \
+        /** \
+        * FIXME: If a request gets allocated, then freed without setting req to null \
+        * then mpi reuses that memory address there might be a conflict \
+        * this should mitigated by CB_op_wait setting req to MPI_REQUEST_NULL, but it's not 100% safe \
+        * this design choice is aimed at closely match the mpi api \
+        * CB_CHECK(CB_dlist_getbyreq(_list, req_ref, &data), _CB_cleanup_label);                  \
+        */ \
             \
         CB_op_wait(data);                                                                        \
     } while(0)
@@ -286,11 +288,12 @@ CB_Error_t CB_dlist_gather(const CB_DistList_t * const list, MPI_Comm comm, int 
         CB_MALLOC(buff, (buff_len) * sizeof(CB_OperationData_t *), _CB_cleanup_label);          \
         for (int i = 0; i < (buff_len); i++) {                                                  \
             CB_OperationData_t *data;                                                            \
-                \
-            // FIXME: If a request gets allocated, then freed without setting req to null \
-            // then mpi reuses that memory address there might be a conflict \
-            // this should mitigated by CB_op_waitall setting all reqs to MPI_REQUEST_NULL, but it's not 100% safe \
-            // this design choice is aimed at closely match the mpi api \
+            /**
+            * FIXME: If a request gets allocated, then freed without setting req to null \
+            * then mpi reuses that memory address there might be a conflict \
+            * this should mitigated by CB_op_waitall setting all reqs to MPI_REQUEST_NULL, but it's not 100% safe \
+            * this design choice is aimed at closely match the mpi api \
+            */ \
             CB_CHECK(CB_dlist_getbyreq(_list, &(reqs)[i], &data), _CB_cleanup_label);           \
                 \
             buff[i] = data;                                                                      \
