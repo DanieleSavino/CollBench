@@ -15,9 +15,10 @@ Implementing custom collective algorithms in MPI is straightforward — measurin
 
 ## Features
 
-- **Nanosecond-resolution timing** per send/recv, with separate start, wait, and end timestamps
-- **Zero-overhead toggle**: compile without `-DCB_PROFILE` and all instrumentation disappears, leaving plain blocking MPI calls
-- **Automatic aggregation**: per-process records are gathered to a root process and exported as JSON
+- **Nanosecond-resolution timing** per send/recv, with separate start, wait, and end timestamps (`t_start_ns`, `t_wait_ns`, `t_end_ns`)
+- **Zero-overhead toggle**: compile without `-DCB_PROFILE` and all instrumentation disappears, leaving plain MPI calls
+- **Blocking and nonblocking variants**: `CB_LSEND`/`CB_LRECV` for logically blocking sends/recvs; `CB_ILSEND`/`CB_ILRECV` + `CB_LWAIT`/`CB_LWAITALL` for fully nonblocking workflows
+- **Automatic aggregation**: per-process records are gathered to a root process via `MPI_Gatherv` and exported as JSON
 
 ---
 
@@ -51,7 +52,10 @@ Build outputs are placed under `build/`:
 ```
 build/
 ├── lib/libcollbench.a
-└── lib/libcollbench_debug.a
+└── obj/
+    ├── bench.o
+    ├── dist_list.o
+    └── export.o
 ```
 
 ---
@@ -61,19 +65,24 @@ build/
 ```
 CollBench/
 ├── include/CollBench/
-│   ├── bench.h        # Core operation types and timing API
-│   ├── dist_list.h    # Distributed operation list
-│   ├── errors.h       # Error codes and utility macros
-│   ├── export.h       # JSON export
-│   └── init.h         # Top-level init/finalize and collective wrappers
+│   ├── bench.h        # Core operation record (CB_OperationData_t), timing API, standalone macros
+│   ├── dist_list.h    # Distributed operation list (CB_DistList_t) and list-based profiling macros
+│   ├── errors.h       # Error codes (CB_Error_t) and utility macros
+│   ├── export.h       # JSON export (CB_dlist_export_json)
+│   └── init.h         # Top-level init/finalize and CB_COLL_START/CB_COLL_END macros
 ├── src/
 │   ├── bench.c
 │   ├── dist_list.c
 │   └── export.c
 ├── demos/
-│   └── bine_bcast/    # Example: BiNE broadcast implementation
+│   ├── bine_bcast/
+│   │   ├── main.c
+│   │   └── Makefile -> ../shared_Makefile
+│   └── shared_Makefile
 ├── scripts/
+│   ├── butterfly.py
 │   └── tree.py
+├── requirements.txt
 └── Makefile
 ```
 
@@ -81,82 +90,260 @@ CollBench/
 
 ## API
 
-Include a single header and call `CB_init` / `CB_finalize` around `MPI_Init` / `MPI_Finalize`:
+### Initialization and finalization
+
+Include the top-level header and call `CB_init` / `CB_finalize` between `MPI_Init` and `MPI_Finalize`. `CB_init` registers the `CB_OperationData_t` MPI derived datatype; `CB_finalize` frees it. Both are no-ops when `CB_PROFILE` is not defined.
 
 ```c
 #include "CollBench/init.h"
 
+MPI_Init(&argc, &argv);
 CB_init();
-// ...
+
+// ... collective calls ...
+
 CB_finalize();
+MPI_Finalize();
 ```
 
-Inside a collective function, open and close an instrumented region with:
+### Instrumenting a collective
+
+Open and close a profiling scope at the top and bottom of a collective function with `CB_COLL_START` / `CB_COLL_END`. `CB_COLL_START` declares the local `err`, `_list`, and `_full_list` variables and initializes the per-process record list. `CB_COLL_END` gathers records from all ranks onto root, exports them to JSON, and frees both lists.
+
 
 ```c
-CB_COLL_START()   // top of the function — allocates per-process record list
-CB_COLL_END(comm, root, "output.json")   // bottom — gathers records and writes JSON on root
+int my_bcast(void *buffer, int count, MPI_Datatype datatype,
+             int root, MPI_Comm comm)
+{
+    CB_COLL_START();
+
+    int rank, size;
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &size);
+
+    /* ... algorithm using CB_LSEND / CB_LRECV / CB_ILSEND / CB_ILRECV ... */
+
+    CB_COLL_END(comm, rank, root, "output.json");
+    return MPI_SUCCESS;
+}
 ```
 
-Replace all point-to-point calls inside the collective with:
+Mismatching `CB_COLL_START` and `CB_COLL_END` is caught at compile time when `CB_PROFILE` is defined.
+
+### Point-to-point macros
+
+All macros below record into the implicit `_list` declared by `CB_COLL_START`. They are no-ops (plain MPI calls) when `CB_PROFILE` is not defined.
+
+#### Blocking
+
+Post an `MPI_Isend` / `MPI_Irecv` and immediately wait, recording `t_start_ns`, `t_wait_ns`, and `t_end_ns`.
 
 ```c
 CB_LSEND(rank, algo_idx, buff, count, datatype, dest,   tag, comm)
 CB_LRECV(rank, algo_idx, buff, count, datatype, source, tag, comm)
 ```
 
-`algo_idx` is an arbitrary integer you assign to tag which algorithm step the operation belongs to — it appears in the JSON output for later analysis.
+#### Nonblocking
 
-When `CB_PROFILE` is **not** defined at compile time, all four macros compile away to plain blocking send/recv calls with zero overhead.
+Post an `MPI_Isend` / `MPI_Irecv` and return immediately. The request handle is stored in the operation record and **must** be completed later via `CB_LWAIT` or `CB_LWAITALL` — calling `MPI_Wait` directly on the handle will corrupt the CollBench data structure.
+
+`req_ref` is captured into a local pointer inside the macro to prevent double-evaluation of expressions with side effects (e.g. `&reqs[i++]`).
+
+```c
+CB_ILSEND(rank, algo_idx, buff, count, datatype, dest,   tag, comm, req_ref)
+CB_ILRECV(rank, algo_idx, buff, count, datatype, source, tag, comm, req_ref)
+```
+
+Wait on a single previously posted nonblocking operation:
+
+```c
+CB_LWAIT(req_ref)
+```
+
+Wait on all requests in an array, recording a shared `t_end_ns` across all of them (equivalent to `MPI_Waitall`):
+
+```c
+CB_LWAITALL(reqs, buff_len)
+```
+
+`algo_idx` is an arbitrary integer you assign to identify which step of the algorithm an operation belongs to — it appears in the JSON output for later analysis.
 
 ---
 
-## Usage Example
+## Usage Examples
 
-Below is an abbreviated version of the BiNE broadcast demo (`demos/bine_bcast/main.c`), which implements a distance-halving / level-doubling broadcast and instruments it with CollBench:
+### Blocking sends and recvs (broadcast-style)
+
+For tree-shaped collectives where each rank either sends or receives at each step, use `CB_LSEND` / `CB_LRECV`. The collective is bracketed by `CB_COLL_START` / `CB_COLL_END`, which handle list allocation, gather, JSON export, and cleanup automatically.
 
 ```c
-#include "CollBench/init.h"
-#include <mpi.h>
-
-int bine_bcast_dhlv(void *buffer, int count, MPI_Datatype datatype,
-                    int root, MPI_Comm comm)
-{
-    CB_COLL_START();  // declares _list, allocates storage
+int my_bcast(void *buff, int count, MPI_Datatype datatype, int root, MPI_Comm comm) {
+    CB_COLL_START();
 
     int rank, size;
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &size);
 
-    /* ... algorithm logic using CB_LSEND / CB_LRECV ... */
+    int step = 0;
+    while (/* rounds remain */) {
+        int peer = /* compute peer */;
 
-    CB_COLL_END(comm, root, "bine_bcast.json");
+        if (has_data) {
+            CB_LSEND(rank, step, buff, count, datatype, peer, 0, comm);
+        } else if (/* should receive */) {
+            CB_LRECV(rank, step, buff, count, datatype, peer, 0, comm);
+        }
+
+        step++;
+    }
+
+    CB_COLL_END(comm, rank, root, "out/bine_bcast.json");
     return MPI_SUCCESS;
 }
+```
 
-int main(int argc, char **argv) {
-    MPI_Init(&argc, &argv);
-    CB_init();
+### Nonblocking sends and recvs (allgather-style)
 
-    int *buff = malloc(sizeof(int) * 100);
-    /* fill buff on rank 0 */
+For algorithms that post multiple sends and recvs per step before waiting, use `CB_ILSEND` / `CB_ILRECV` with a shared `MPI_Request` array, then drain it with `CB_LWAITALL` at the end of each step. `req_idx` is safe to use as the index expression — `req_ref` is captured into a local pointer inside the macro to avoid double-evaluation.
 
-    bine_bcast_dhlv(buff, 100, MPI_INT, 0, MPI_COMM_WORLD);
+```c
+int my_allgather(const void *sendbuff, int sendcount, MPI_Datatype sendtype,
+                 void *recvbuff, int recvcount, MPI_Datatype recvtype,
+                 MPI_Comm comm) {
+    CB_COLL_START();
 
-    CB_finalize();
-    MPI_Finalize();
+    int rank, size;
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &size);
+
+    int req_idx = 0;
+    MPI_Request *reqs = malloc(size * 2 * sizeof(MPI_Request));
+
+    int step = 0;
+    while (/* rounds remain */) {
+        int peer = /* compute peer */;
+
+        /* post all sends and recvs for this step */
+        CB_ILSEND(rank, step, send_ptr, sendcount, sendtype, peer, 0, comm,
+                  &reqs[req_idx++]);
+        CB_ILRECV(rank, step, recv_ptr, recvcount, recvtype, peer, 0, comm,
+                  &reqs[req_idx++]);
+
+        /* wait for all posted operations before advancing */
+        CB_LWAITALL(reqs, req_idx);
+        req_idx = 0;
+        step++;
+    }
+
+    free(reqs);
+    CB_COLL_END(comm, rank, 0, "out/bine_allgather.json");
+    return MPI_SUCCESS;
 }
 ```
 
-Compile with `-DCB_PROFILE` to enable profiling:
+> **Warning:** never call `MPI_Wait` / `MPI_Waitall` directly on a request posted through `CB_ILSEND` or `CB_ILRECV`. The request handle is stored inside the operation record; bypassing `CB_LWAIT` / `CB_LWAITALL` will leave the record without a completion timestamp and corrupt the CollBench data structure.
+
+### Compiling
 
 ```sh
+# With profiling
 mpicc -DCB_PROFILE -ICollBench/include main.c -lcollbench -lm -o demo
 mpirun -n 8 ./demo
-# produces bine_bcast.json with per-operation timing for all 8 processes
+# produces the JSON file(s) specified in CB_COLL_END
+
+# Without profiling — zero overhead, plain MPI
+mpicc -ICollBench/include main.c -lcollbench -lm -o demo
 ```
 
-Omit `-DCB_PROFILE` for a production build where all instrumentation is compiled away.
+---
+
+## Visualization
+
+Two Python scripts in `scripts/` consume the JSON output and produce figures. Install dependencies first:
+
+```sh
+pip install -r requirements.txt
+```
+
+### `scripts/tree.py` — broadcast / gather tree
+
+Draws the communication tree for a single-root collective (broadcast or gather). Direction is auto-detected from the JSON but can be overridden.
+
+```sh
+# Basic usage
+python scripts/tree.py out/bine_bcast_dhlv.json
+
+# Custom root, high-DPI output
+python scripts/tree.py --root 3 --dpi 300 --out tree.png out/bine_bcast_dhlv.json
+
+# Gather direction, hide latency labels
+python scripts/tree.py --direction gather --no-latency out/gather.json
+
+# Custom round palette
+python scripts/tree.py --palette "#E05C5C,#5B8FF9,#5AD8A6" out/bine_bcast_dhlv.json
+```
+
+Key options:
+
+| Option | Default | Description |
+|---|---|---|
+| `--root ROOT` | `0` | Root rank |
+| `--direction {broadcast,gather}` | auto | Collective direction |
+| `--dpi DPI` | `220` | Output DPI |
+| `--out OUT` | `collbench_tree.png` | Output path |
+| `--no-latency` | — | Hide per-edge latency labels |
+| `--no-legend` | — | Hide the round legend |
+| `--no-row-labels` | — | Hide left-side round labels |
+| `--palette PALETTE` | built-in | Comma-separated hex colors for rounds |
+
+### `scripts/butterfly.py` — allgather / multi-source visualizer
+
+Supports three layout modes for collectives where every rank is both a sender and a receiver.
+
+```sh
+# Grid of broadcast trees, one per source rank (default)
+python scripts/butterfly.py out/bine_allgather_b2b.json
+
+# All trees overlaid on one canvas
+python scripts/butterfly.py --mode overlay out/bine_allgather_b2b.json
+
+# Rank-vs-step matrix with peer arrows
+python scripts/butterfly.py --mode butterfly --dpi 300 --out fig.png out/bine_allgather_b2b.json
+
+# Grid with fixed column count
+python scripts/butterfly.py --mode grid --grid-cols 4 out/bine_allgather_b2b.json
+```
+
+Key options:
+
+| Option | Default | Description |
+|---|---|---|
+| `--mode {grid,overlay,butterfly}` | `grid` | Layout mode |
+| `--dpi DPI` | auto | Output DPI |
+| `--out OUT` | `collbench_<mode>.png` | Output path |
+| `--grid-cols N` | auto | Number of columns in grid mode |
+| `--no-latency` | — | Hide latency labels |
+| `--no-legend` | — | Hide legend |
+| `--palette PALETTE` | built-in | Comma-separated hex colors |
+
+Both scripts support `--no-save` and `--no-show` to control whether the figure is written to disk or displayed interactively.
+
+---
+
+## Error Handling
+
+All library functions return `CB_Error_t`. The macros `CB_CHECK` and `MPI_CHECK` (defined in `errors.h`) expect a local `CB_Error_t err` variable and a cleanup `goto` label in scope — both are provided automatically inside a `CB_COLL_START` / `CB_COLL_END` block. Error codes are:
+
+| Code | Meaning |
+|---|---|
+| `CB_SUCCESS` | Success (guaranteed 0) |
+| `CB_ERR_OUT_OF_MEM` | `malloc`/`realloc` returned NULL |
+| `CB_ERR_OUT_OF_BOUNDS` | Index exceeded container size |
+| `CB_ERR_NULLPTR` | A required pointer argument was NULL |
+| `CB_ERR_INT_OF` | Integer overflow detected |
+| `CB_ERR_IO` | I/O operation failed |
+| `CB_ERR_INVALID_ARG` | Argument value is invalid or not found |
+| `CB_ERR_MPI` | An MPI call returned a non-`MPI_SUCCESS` code |
 
 ---
 
@@ -172,7 +359,7 @@ That said, if you stumble across it and find a bug or have a suggestion, feel fr
 
 MIT License
 
-Copyright (c) 2024 Daniele — Sapienza Università di Roma
+Copyright (c) 2026 Daniele — Sapienza Università di Roma
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
