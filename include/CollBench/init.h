@@ -28,13 +28,12 @@ static inline CB_Error_t CB_finalize(void) {
     CB_CHECK(CB_dlist_init(&_list, CB_DEF_INIT_SIZE), _CB_cleanup_label);
 
 #define CB_COLL_END(comm, rank, root, out_path) \
-    _CB_cleanup_label: \
         CB_CHECK(CB_dlist_gather(_list, comm, root, &_full_list), _CB_gather_failed); \
     _CB_gather_failed: \
-        CB_CHECK(CB_dlist_free(_list), _CB_end_cleanup); \
+        CB_CHECK(CB_dlist_free(_list), _CB_cleanup_label); \
         if(rank == root) \
-            CB_CHECK(CB_dlist_export_json(_full_list, out_path), _CB_end_cleanup); \
-    _CB_end_cleanup: \
+            CB_CHECK(CB_dlist_export_json(_full_list, out_path), _CB_cleanup_label); \
+    _CB_cleanup_label: \
         CB_dlist_free(_full_list)
 
 #else
@@ -48,6 +47,6 @@ static inline CB_Error_t CB_finalize(void) {
 }
 
 #define CB_COLL_START() ;
-#define CB_COLL_END(comm, root, out_path) ;
+#define CB_COLL_END(comm, rank, root, out_path) ;
 
 #endif

@@ -25,7 +25,7 @@ typedef enum {
 const char* CB_optype_str(CB_OpType_t op_type);
 
 typedef struct {
-    MPI_Request *req;
+    MPI_Request req;
     int rank;
     int peer;
     CB_OpType_t op_type;
@@ -60,7 +60,7 @@ do {                                                              \
 
 #define CB_OP_WRAP_NONBLOCKING(rank, peer, op_type, algo_idx, call, ref_data, req_ref, label) \
 do {                                                                     \
-    CB_op_init(rank, peer, op_type, algo_idx, &req_ref, ref_data);                            \
+    CB_op_init(rank, peer, op_type, algo_idx, req_ref, ref_data);                            \
     CB_op_begin(*ref_data);                                              \
     MPI_CHECK(call, label);                                              \
     CB_op_wait(*ref_data);                                               \

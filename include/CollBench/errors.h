@@ -1,7 +1,8 @@
 #pragma once
 
-#include <stdio.h>
 #include <limits.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 typedef enum {
     CB_SUCCESS = 0,
@@ -13,6 +14,20 @@ typedef enum {
     CB_ERR_INVALID_ARG,
     CB_ERR_MPI,
 } CB_Error_t;
+
+static inline char* CB_strerr(CB_Error_t err) {
+    switch (err) {
+        case CB_SUCCESS:           return "Success";
+        case CB_ERR_OUT_OF_MEM:    return "Out of memory";
+        case CB_ERR_OUT_OF_BOUNDS: return "Index out of bounds";
+        case CB_ERR_NULLPTR:       return "Null pointer";
+        case CB_ERR_INT_OF:        return "Integer overflow";
+        case CB_ERR_IO:            return "I/O error";
+        case CB_ERR_INVALID_ARG:   return "Invalid argument";
+        case CB_ERR_MPI:           return "MPI error";
+        default:                   return "Unknown error";
+    }
+}
 
 #define CB_MALLOC(ptr, size, label) \
 do { \
@@ -43,7 +58,7 @@ do { \
 do { \
     err = (call); \
     if(err != CB_SUCCESS) { \
-        fprintf(stderr, "[CB ERROR] %s failed: %d\n", #call, err); \
+        fprintf(stderr, "[CB ERROR] %s in file: %s at line %d failed: %s\n", #call, __FILE__, __LINE__, CB_strerr(err)); \
         goto label; \
     } \
 } while(0)
