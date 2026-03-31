@@ -40,7 +40,7 @@ CB_Error_t CB_op_init(int rank, int peer, CB_OpType_t op_type, size_t algo_idx, 
 }
 
 CB_Error_t CB_op_init_ext(int rank, int peer, CB_OpType_t op_type, size_t algo_idx, MPI_Request *req, CB_OperationData_t *data) {
-    data->req = req;
+    data->req = *req;
     data->rank = rank;
     data->peer = peer;
     data->op_type = op_type;
@@ -81,35 +81,44 @@ CB_Error_t CB_op_wait(CB_OperationData_t * const data) {
 
     data->t_wait_ns = getCurrentTimeNS();
 
-    MPI_CHECK(MPI_Wait(data->req, MPI_STATUS_IGNORE), cleanup);
+    MPI_CHECK(MPI_Wait(&data->req, MPI_STATUS_IGNORE), cleanup);
 
     data->t_end_ns = getCurrentTimeNS();
-    data->req = NULL;
+    data->req = MPI_REQUEST_NULL;
 
     cleanup:
         return err;
 }
 
+// NOTE: Double ptr as the data buff is owned by the list, so makes it easier to rearrange stuff
 CB_Error_t CB_op_waitall(CB_OperationData_t ** const buff, size_t buff_len) {
     CB_Error_t err = CB_SUCCESS;
     if (!buff) {
         return CB_ERR_NULLPTR;
     }
 
-    MPI_Request *reqs;
+    MPI_Request *reqs = NULL;
     CB_MALLOC(reqs, buff_len * sizeof(MPI_Request), cleanup);
 
     for (size_t i = 0; i < buff_len; i++) {
         buff[i]->t_wait_ns = getCurrentTimeNS();
-        reqs[i] = buff[i]->req ? *(buff[i]->req) : MPI_REQUEST_NULL;
+        reqs[i] = buff[i]->req;
     }
 
-    for (size_t completed = 0; completed < buff_len; completed++) {
-        int idx;
-        MPI_CHECK(MPI_Waitany(buff_len, reqs, &idx, MPI_STATUS_IGNORE), cleanup);
-        if (idx == MPI_UNDEFINED) break;
-        buff[idx]->t_end_ns = getCurrentTimeNS();
+    // FIXME: This sets the end time of all reqs to max time
+    MPI_CHECK(MPI_Waitall(buff_len, reqs, MPI_STATUSES_IGNORE), cleanup);
+    for(size_t i = 0; i < buff_len; i++) {
+        buff[i]->req = MPI_REQUEST_NULL;
+        buff[i]->t_end_ns = getCurrentTimeNS();
     }
+
+    // TODO: Implement something like this (unsafe as waitany with null reqs is undefined behaviour)
+    // for (size_t completed = 0; completed < buff_len; completed++) {
+    //     int idx;
+    //     MPI_CHECK(MPI_Waitany(buff_len, reqs, &idx, MPI_STATUS_IGNORE), cleanup);
+    //     if (idx == MPI_UNDEFINED) break;
+    //     buff[idx]->t_end_ns = getCurrentTimeNS();
+    // }
 
     cleanup:
         free(reqs);
@@ -135,7 +144,8 @@ CB_Error_t CB_op_datatype_init(void) {
         MPI_Aint     offset;
         MPI_Datatype type;
     } fields[] = {
-        { offsetof(CB_OperationData_t, req),        MPI_UINT64_T }, /* MPI_Request* as opaque 8-byte value */
+        // FIXME: works only on 64-bit systems
+        { offsetof(CB_OperationData_t, req),        MPI_UINT64_T }, /* MPI_Request as 8-byte ptr value */
         { offsetof(CB_OperationData_t, rank),        MPI_INT },
         { offsetof(CB_OperationData_t, peer),        MPI_INT },
         { offsetof(CB_OperationData_t, op_type),        MPI_INT },
@@ -145,6 +155,7 @@ CB_Error_t CB_op_datatype_init(void) {
         { offsetof(CB_OperationData_t, t_end_ns),   MPI_UINT64_T },
     };
 
+    // NOTE: This computes nfields at compile time (equivalent to templatge heavy programming in c++)
     enum { NFIELDS = sizeof(fields) / sizeof(fields[0]) };
 
     int          lengths[NFIELDS];

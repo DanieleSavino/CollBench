@@ -1,9 +1,11 @@
 #include "CollBench/export.h"
 #include "CollBench/bench.h"
+#include "CollBench/dist_list.h"
 #include "CollBench/errors.h"
 #include <asm-generic/errno-base.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <time.h>
 #include <sys/stat.h>
@@ -34,6 +36,16 @@ static CB_Error_t CB_mkdir_p(const char *path) {
 
 CB_Error_t CB_dlist_export_json(const CB_DistList_t *list, const char *path) {
     CB_Error_t err = CB_SUCCESS;
+
+    CB_OperationData_t *data;
+    for(size_t i = 0; i < list->len; i++) {
+        CB_dlist_get(list, i, &data);
+        if(data->t_end_ns < data->t_start_ns) {
+            fprintf(stderr, "[CollBench]: Invalid data to export\n");
+            err = CB_ERR_INVALID_ARG;
+            goto ret;
+        }
+    }
 
     if (!list || !path) return CB_ERR_INVALID_ARG;
     CB_CHECK(CB_mkdir_p(path), ret);
