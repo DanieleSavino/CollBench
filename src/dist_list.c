@@ -62,8 +62,6 @@ CB_Error_t CB_dlist_get(const CB_DistList_t *const list, size_t idx, CB_Operatio
 CB_Error_t CB_dlist_getbyreq(const CB_DistList_t *list, MPI_Request *req, CB_OperationData_t **out) {
     CB_Error_t err = CB_SUCCESS;
 
-    printf("Looking for: %p\n", (void*)*req);
-
     if (!out || !list || !req) {
         return CB_ERR_NULLPTR;
     }
@@ -72,8 +70,6 @@ CB_Error_t CB_dlist_getbyreq(const CB_DistList_t *list, MPI_Request *req, CB_Ope
         CB_CHECK(CB_dlist_get(list, i, &data), cleanup);
         if (err != CB_SUCCESS) return err;
         if (data->req == *req) {
-            printf("Founs: %p\n", (void*)req);
-            CB_op_pprint(data);
             *out = data;
             return CB_SUCCESS;
         }
