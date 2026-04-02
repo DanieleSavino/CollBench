@@ -80,7 +80,7 @@ CB_Error_t CB_dlist_pop(CB_DistList_t * const list, CB_OperationData_t **out);
 /**
  * @brief Finds the first record whose req field matches *req.
  *        Comparison is by MPI_Request value, not pointer.
- *        WARN: The MPI_Request (aka pointer to some mpi struct) may not be a key
+ *        XXX: The MPI_Request (aka pointer to some mpi struct) may not be a key
  *        as mpi might reuse memory regions after freeing old requests
  * @param list The list to search.
  * @param req  Pointer to the MPI_Request value to search for.
@@ -225,6 +225,8 @@ CB_Error_t CB_dlist_gather(const CB_DistList_t * const list, MPI_Comm comm, int 
         CB_CHECK(CB_dlist_push(_list, rank, dest, CB_OP_SEND, algo_idx, req, &data),            \
             _CB_cleanup_label);                                                                  \
         CB_op_begin(data);                                                                       \
+        /**  WARN: Request hijacked, index is injected */ \
+        *req = (MPI_Request)(uintptr_t)(_list->len - 1); \
     } while(0)
 
 /**
@@ -252,6 +254,13 @@ CB_Error_t CB_dlist_gather(const CB_DistList_t * const list, MPI_Comm comm, int 
         CB_CHECK(CB_dlist_push(_list, rank, source, CB_OP_RECV, algo_idx, req, &data),          \
             _CB_cleanup_label);                                                                  \
         CB_op_begin(data);                                                                       \
+        /**
+         * WARN: Request hijacked, index is injected,
+         * DO NOT call this MPI_Wait on this request,
+         * if needed data->req can be used.
+         * FIXME: Check size_t to ptr cast.
+         */ \
+        *req = (MPI_Request)(uintptr_t)(_list->len - 1); \
     } while(0)
 
 /**
@@ -264,12 +273,11 @@ CB_Error_t CB_dlist_gather(const CB_DistList_t * const list, MPI_Comm comm, int 
         CB_OperationData_t *data;                                                                \
             \
         /** \
-        * FIXME: If a request gets allocated, then freed without setting req to null \
-        * then mpi reuses that memory address there might be a conflict \
-        * this should mitigated by CB_op_wait setting req to NULL, but it's not 100% safe \
-        * this design choice is aimed at closely match the mpi api \
-        * CB_CHECK(CB_dlist_getbyreq(_list, req_ref, &data), _CB_cleanup_label);                  \
+        * WARN: This macro waits on a hijacked request containing list index,
+        * DO NOT use this on a regular request.
+        * FIXME: Check ptr to size_t cast.
         */ \
+        CB_CHECK(CB_dlist_get(_list, (size_t)(uintptr_t)*req_ref, &data), _CB_cleanup_label);                  \
             \
         CB_op_wait(data);                                                                        \
     } while(0)
@@ -289,12 +297,11 @@ CB_Error_t CB_dlist_gather(const CB_DistList_t * const list, MPI_Comm comm, int 
         for (int i = 0; i < (buff_len); i++) {                                                  \
             CB_OperationData_t *data;                                                            \
             /**
-            * FIXME: If a request gets allocated, then freed without setting req to null \
-            * then mpi reuses that memory address there might be a conflict \
-            * this should mitigated by CB_op_waitall setting all reqs to NULL, but it's not 100% safe \
-            * this design choice is aimed at closely match the mpi api \
+            * WARN: This macro waits on a hijacked request containing list index,
+            * DO NOT use this on a regular request
+            * FIXME: Check ptr to size_t cast.
             */ \
-            CB_CHECK(CB_dlist_getbyreq(_list, &(reqs)[i], &data), _CB_cleanup_label);           \
+            CB_CHECK(CB_dlist_get(_list, (size_t)(uintptr_t)reqs[i], &data), _CB_cleanup_label);           \
                 \
             buff[i] = data;                                                                      \
         }                                                                                        \
