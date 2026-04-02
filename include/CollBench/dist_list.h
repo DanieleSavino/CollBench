@@ -266,7 +266,7 @@ CB_Error_t CB_dlist_gather(const CB_DistList_t * const list, MPI_Comm comm, int 
         /** \
         * FIXME: If a request gets allocated, then freed without setting req to null \
         * then mpi reuses that memory address there might be a conflict \
-        * this should mitigated by CB_op_wait setting req to MPI_REQUEST_NULL, but it's not 100% safe \
+        * this should mitigated by CB_op_wait setting req to NULL, but it's not 100% safe \
         * this design choice is aimed at closely match the mpi api \
         * CB_CHECK(CB_dlist_getbyreq(_list, req_ref, &data), _CB_cleanup_label);                  \
         */ \
@@ -278,7 +278,7 @@ CB_Error_t CB_dlist_gather(const CB_DistList_t * const list, MPI_Comm comm, int 
  * @brief Waits on all previously posted nonblocking operations in reqs[0..buff_len-1].
  *        Looks up each request in _list by value and calls CB_op_waitall to record timestamps.
  *        NOTE: All requests must have unique, non-null MPI_Request values at lookup time.
- *        Requests completed eagerly by MPI (set to MPI_REQUEST_NULL) may cause lookup failure.
+ *        Requests completed eagerly by MPI (set to NULL) may cause lookup failure.
  * @param reqs     Array of MPI_Request handles.
  * @param buff_len Number of requests in reqs.
  */
@@ -291,7 +291,7 @@ CB_Error_t CB_dlist_gather(const CB_DistList_t * const list, MPI_Comm comm, int 
             /**
             * FIXME: If a request gets allocated, then freed without setting req to null \
             * then mpi reuses that memory address there might be a conflict \
-            * this should mitigated by CB_op_waitall setting all reqs to MPI_REQUEST_NULL, but it's not 100% safe \
+            * this should mitigated by CB_op_waitall setting all reqs to NULL, but it's not 100% safe \
             * this design choice is aimed at closely match the mpi api \
             */ \
             CB_CHECK(CB_dlist_getbyreq(_list, &(reqs)[i], &data), _CB_cleanup_label);           \
