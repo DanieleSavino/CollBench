@@ -1,7 +1,7 @@
 # CollBench
 
 > [!WARNING]
-> This README was written from the source code and headers. When in doubt, refer to the headers in `include/CollBench/` as the authoritative reference.
+> This README was AI-generated from the source code and headers. Some details may be imprecise, incomplete, or outdated. When in doubt, refer to the headers in include/CollBench/ as the authoritative reference.
 
 **CollBench** is a lightweight C library for instrumenting and benchmarking MPI collective communication algorithms. Developed as part of a Bachelor's thesis in Computer Engineering at **Sapienza Università di Roma**, it provides a clean API for timing individual MPI operations, aggregating results across processes, and exporting structured profiling data for analysis.
 
