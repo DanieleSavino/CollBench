@@ -74,10 +74,11 @@ CB_Error_t CB_dlist_getbyreq(const CB_DistList_t *list, MPI_Request *req, CB_Ope
             return CB_SUCCESS;
         }
     }
-    err = CB_ERR_INVALID_ARG;
-    *out = NULL;
+    CB_CHECK(CB_dlist_get(list, (size_t)*req, out), cleanup);
+    return CB_SUCCESS;
 
     cleanup:
+        *out = NULL;
         return err;
 }
 
