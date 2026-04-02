@@ -55,10 +55,10 @@ const char* CB_optype_str(CB_OpType_t op_type);
  * Tracks the MPI request handle, communicating ranks, operation type,
  * algorithm index, and three timestamps (post, wait, completion).
  * The req field stores the MPI_Request by value; it is set to
- * MPI_REQUEST_NULL after the operation completes.
+ * NULL after the operation completes.
  */
 typedef struct {
-    MPI_Request req;       /**< MPI request handle (value, not pointer). MPI_REQUEST_NULL when complete. */
+    MPI_Request req;       /**< MPI request handle. NULL when complete. */
     int rank;              /**< Rank of the process that posted this operation. */
     int peer;              /**< Peer rank (destination for sends, source for recvs). */
     CB_OpType_t op_type;   /**< Type of operation (send, recv, bcast, ...). */
@@ -108,7 +108,7 @@ CB_Error_t CB_op_begin(CB_OperationData_t * const data);
 
 /**
  * @brief Waits for the operation to complete and records t_wait_ns and t_end_ns.
- *        Sets req to MPI_REQUEST_NULL on completion.
+ *        Sets req to NULL on completion.
  * @param data The operation record to wait on.
  * @return CB_SUCCESS or an error code.
  */
@@ -116,7 +116,7 @@ CB_Error_t CB_op_wait(CB_OperationData_t * const data);
 
 /**
  * @brief Waits for multiple operations using MPI_Waitall and records timestamps.
- *        Sets req to MPI_REQUEST_NULL on all entries after completion.
+ *        Sets req to NULL on all entries after completion.
  *        Note: t_end_ns is set to the same value for all operations (time of MPI_Waitall return).
  * @param buff     Array of pointers to operation records.
  * @param buff_len Number of entries in buff.

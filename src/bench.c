@@ -84,7 +84,9 @@ CB_Error_t CB_op_wait(CB_OperationData_t * const data) {
     MPI_CHECK(MPI_Wait(&data->req, MPI_STATUS_IGNORE), cleanup);
 
     data->t_end_ns = getCurrentTimeNS();
-    data->req = MPI_REQUEST_NULL;
+
+    // WARN: Not MPI_REQUEST_NULL as it's not consistent across nodes
+    data->req = NULL;
 
     cleanup:
         return err;
@@ -108,7 +110,10 @@ CB_Error_t CB_op_waitall(CB_OperationData_t ** const buff, size_t buff_len) {
     // FIXME: This sets the end time of all reqs to max time
     MPI_CHECK(MPI_Waitall(buff_len, reqs, MPI_STATUSES_IGNORE), cleanup);
     for(size_t i = 0; i < buff_len; i++) {
-        buff[i]->req = MPI_REQUEST_NULL;
+
+        // WARN: Not MPI_REQUEST_NULL as it's not consistent across nodes
+        buff[i]->req = NULL;
+
         buff[i]->t_end_ns = getCurrentTimeNS();
     }
 
