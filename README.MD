@@ -1,7 +1,7 @@
 # CollBench
 
 > [!WARNING]
-> This README was AI-generated from the source code and headers. Some details may be imprecise, incomplete, or outdated. When in doubt, refer to the headers in `include/CollBench/` as the authoritative reference.
+> This README was AI-generated from the source code and headers. Some details may be imprecise, incomplete, or outdated. When in doubt, refer to the headers in include/CollBench/ as the authoritative reference.
 
 **CollBench** is a lightweight C library for instrumenting and benchmarking MPI collective communication algorithms. Developed as part of a Bachelor's thesis in Computer Engineering at **Sapienza Università di Roma**, it provides a clean API for timing individual MPI operations, aggregating results across processes, and exporting structured profiling data for analysis.
 
@@ -9,7 +9,7 @@
 
 ## Overview
 
-Implementing custom collective algorithms in MPI is straightforward — measuring them precisely is not. CollBench fills that gap: replace your point-to-point calls with `CB_LSEND` / `CB_LRECV`, bracket the function with `CB_COLL_START` / `CB_COLL_END`, and get per-operation nanosecond-resolution timing exported as JSON across all processes. Compile without `-DCB_PROFILE` and the library adds no overhead whatsoever.
+Implementing custom collective algorithms in MPI is straightforward — measuring them precisely is not. CollBench fills that gap: replace your point-to-point calls with `CB_LSEND` / `CB_LRECV`, bracket the function with `CB_COLL_START` / `CB_COLL_END`, and get per-operation nanosecond-resolution timing exported as JSON across all processes. Compile without `-DCB_PROFILE` and the library adds zero overhead.
 
 ---
 
@@ -110,7 +110,6 @@ MPI_Finalize();
 
 Open and close a profiling scope at the top and bottom of a collective function with `CB_COLL_START` / `CB_COLL_END`. `CB_COLL_START` declares the local `err`, `_list`, and `_full_list` variables and initializes the per-process record list. `CB_COLL_END` gathers records from all ranks onto root, exports them to JSON, and frees both lists.
 
-
 ```c
 int my_bcast(void *buffer, int count, MPI_Datatype datatype,
              int root, MPI_Comm comm)
@@ -145,14 +144,15 @@ CB_LRECV(rank, algo_idx, buff, count, datatype, source, tag, comm)
 
 #### Nonblocking
 
-Post an `MPI_Isend` / `MPI_Irecv` and return immediately. The request handle is stored in the operation record and **must** be completed later via `CB_LWAIT` or `CB_LWAITALL` — calling `MPI_Wait` directly on the handle will corrupt the CollBench data structure.
-
-`req_ref` is captured into a local pointer inside the macro to prevent double-evaluation of expressions with side effects (e.g. `&reqs[i++]`).
+Post an `MPI_Isend` / `MPI_Irecv` and return immediately.
 
 ```c
 CB_ILSEND(rank, algo_idx, buff, count, datatype, dest,   tag, comm, req_ref)
 CB_ILRECV(rank, algo_idx, buff, count, datatype, source, tag, comm, req_ref)
 ```
+
+> [!WARNING]
+> After posting, the value written into `*req_ref` is **overwritten with an opaque internal list index** — it is no longer a valid `MPI_Request`. Never pass it to `MPI_Wait`, `MPI_Waitall`, or any other MPI function. The real MPI handle is preserved inside the operation record (`data->req`) and is used transparently by `CB_LWAIT` / `CB_LWAITALL`. Bypassing these macros will corrupt the CollBench data structure and leave operations without completion timestamps.
 
 Wait on a single previously posted nonblocking operation:
 
@@ -174,7 +174,7 @@ CB_LWAITALL(reqs, buff_len)
 
 ### Blocking sends and recvs (broadcast-style)
 
-For tree-shaped collectives where each rank either sends or receives at each step, use `CB_LSEND` / `CB_LRECV`. The collective is bracketed by `CB_COLL_START` / `CB_COLL_END`, which handle list allocation, gather, JSON export, and cleanup automatically.
+For tree-shaped collectives where each rank either sends or receives at each step, use `CB_LSEND` / `CB_LRECV`.
 
 ```c
 int my_bcast(void *buff, int count, MPI_Datatype datatype, int root, MPI_Comm comm) {
@@ -204,7 +204,9 @@ int my_bcast(void *buff, int count, MPI_Datatype datatype, int root, MPI_Comm co
 
 ### Nonblocking sends and recvs (allgather-style)
 
-For algorithms that post multiple sends and recvs per step before waiting, use `CB_ILSEND` / `CB_ILRECV` with a shared `MPI_Request` array, then drain it with `CB_LWAITALL` at the end of each step. `req_idx` is safe to use as the index expression — `req_ref` is captured into a local pointer inside the macro to avoid double-evaluation.
+For algorithms that post multiple sends and recvs per step before waiting, use `CB_ILSEND` / `CB_ILRECV` with a shared `MPI_Request` array, then drain it with `CB_LWAITALL` at the end of each step.
+
+`req_idx` is safe to use as the index expression — `req_ref` is captured into a local pointer inside the macro to avoid double-evaluation of expressions with side effects (e.g. `&reqs[req_idx++]`).
 
 ```c
 int my_allgather(const void *sendbuff, int sendcount, MPI_Datatype sendtype,
@@ -241,7 +243,8 @@ int my_allgather(const void *sendbuff, int sendcount, MPI_Datatype sendtype,
 }
 ```
 
-> **Warning:** never call `MPI_Wait` / `MPI_Waitall` directly on a request posted through `CB_ILSEND` or `CB_ILRECV`. The request handle is stored inside the operation record; bypassing `CB_LWAIT` / `CB_LWAITALL` will leave the record without a completion timestamp and corrupt the CollBench data structure.
+> [!NOTE]
+> After `CB_ILSEND` / `CB_ILRECV` returns, `reqs[i]` holds an internal list index, not a real MPI request handle. The array is only valid as input to `CB_LWAIT` / `CB_LWAITALL` — do not pass its entries to any MPI function directly.
 
 ### Compiling
 
@@ -254,6 +257,22 @@ mpirun -n 8 ./demo
 # Without profiling — zero overhead, plain MPI
 mpicc -ICollBench/include main.c -lcollbench -lm -o demo
 ```
+
+---
+
+## Internal: request hijacking
+
+When profiling is enabled, `CB_ILSEND` and `CB_ILRECV` post the MPI operation and store the real `MPI_Request` handle inside the operation record. They then **overwrite** `*req_ref` with the record's index in `_list`, cast through `uintptr_t`:
+
+```c
+*req = (MPI_Request)(uintptr_t)(_list->len - 1);
+```
+
+`CB_LWAIT` and `CB_LWAITALL` reverse this by casting back to `size_t` and calling `CB_dlist_get` by index, then forwarding the real handle (stored in `data->req`) to `CB_op_wait` / `CB_op_waitall`, which call `MPI_Wait` / `MPI_Waitall` and record the completion timestamps.
+
+This sidesteps the fragility of using `MPI_Request` values as lookup keys — MPI is free to reuse handle addresses after a request completes, which made the original `CB_dlist_getbyreq` approach unreliable across multi-step algorithms. `CB_dlist_getbyreq` is retained in the API but is no longer used internally.
+
+The cast is safe on any platform where `sizeof(MPI_Request) >= sizeof(uintptr_t)`, which holds on all supported 32- and 64-bit targets. Overflow of `_list->len` past `UINTPTR_MAX` is not a practical concern.
 
 ---
 
@@ -282,8 +301,6 @@ python scripts/tree.py --direction gather --no-latency out/gather.json
 # Custom round palette
 python scripts/tree.py --palette "#E05C5C,#5B8FF9,#5AD8A6" out/bine_bcast_dhlv.json
 ```
-
-Key options:
 
 | Option | Default | Description |
 |---|---|---|
@@ -314,8 +331,6 @@ python scripts/butterfly.py --mode butterfly --dpi 300 --out fig.png out/bine_al
 python scripts/butterfly.py --mode grid --grid-cols 4 out/bine_allgather_b2b.json
 ```
 
-Key options:
-
 | Option | Default | Description |
 |---|---|---|
 | `--mode {grid,overlay,butterfly}` | `grid` | Layout mode |
@@ -332,7 +347,7 @@ Both scripts support `--no-save` and `--no-show` to control whether the figure i
 
 ## Error Handling
 
-All library functions return `CB_Error_t`. The macros `CB_CHECK` and `MPI_CHECK` (defined in `errors.h`) expect a local `CB_Error_t err` variable and a cleanup `goto` label in scope — both are provided automatically inside a `CB_COLL_START` / `CB_COLL_END` block. Error codes are:
+All library functions return `CB_Error_t`. The macros `CB_CHECK` and `MPI_CHECK` (defined in `errors.h`) expect a local `CB_Error_t err` variable and a cleanup `goto` label in scope — both are provided automatically inside a `CB_COLL_START` / `CB_COLL_END` block.
 
 | Code | Meaning |
 |---|---|
