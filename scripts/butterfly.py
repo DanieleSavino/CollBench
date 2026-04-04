@@ -2,11 +2,17 @@
 """
 collbench_viz.py — unified visualizer for CollBench allgather JSON exports.
 
-Three modes
+Four modes
   grid       (default) — N small broadcast-trees in a grid, one per source rank
   overlay              — all N broadcast-trees stacked vertically on one canvas
   butterfly            — rank-vs-step matrix; arrows show which peers exchange
                          at each step (send left, recv right of each column)
+  ladder               — sorting-network style: ranks as VERTICAL wires running
+                         top-to-bottom (P0…Pn across the top), steps as columns;
+                         vertical connectors with bidirectional arrowheads between
+                         the two rank wires that exchange at each step.
+  candle               — horizontal rank lanes left-to-right, diagonal X crossings
+                         between the two ranks that exchange at each step column.
 
 Auto-sizing
   Figure dimensions, DPI, font sizes, node radii, and spacing are derived
@@ -19,6 +25,9 @@ Examples:
     python collbench_viz.py out/bine_allgather_b2b.json
     python collbench_viz.py --mode overlay out.json
     python collbench_viz.py --mode butterfly --no-latency out.json
+    python collbench_viz.py --mode ladder out.json
+    python collbench_viz.py --mode candle out.json
+    python collbench_viz.py --mode ladder --no-latency --dpi 200 out.json
     python collbench_viz.py --mode butterfly --dpi 300 --out fig.png out.json
     python collbench_viz.py --mode grid --grid-cols 4 --dpi 200 out.json
 """
@@ -32,6 +41,7 @@ import matplotlib
 import matplotlib.font_manager as fm
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 
 
 # ── fonts ─────────────────────────────────────────────────────────────────────
@@ -115,8 +125,6 @@ def auto_grid_params(n_ranks, n_steps, grid_cols=None):
     """Return (ncols, nrows, cell_w, cell_h, col_w, row_h, node_r, fontsizes)."""
     ncols  = grid_cols or math.ceil(math.sqrt(n_ranks))
     nrows  = math.ceil(n_ranks / ncols)
-    # each small tree has n_ranks nodes wide × n_steps+1 rows tall
-    # target cell size: enough for the tree to breathe
     col_w  = _clamp(1.4 - 0.04 * n_ranks, 0.55, 1.3)
     row_h  = _clamp(1.3 - 0.04 * n_steps,  0.55, 1.2)
     cell_w = n_ranks * col_w + 0.9
@@ -160,6 +168,51 @@ def auto_butterfly_params(n_ranks, n_steps):
     return dict(col_w=col_w, row_h=row_h, node_r=node_r,
                 node_fs=node_fs, lat_fs=lat_fs,
                 rank_fs=rank_fs, step_fs=step_fs,
+                fig_w=fig_w, fig_h=fig_h)
+
+
+def auto_ladder_params(n_ranks, n_steps):
+    """
+    Ladder: ranks as VERTICAL wires (P0…Pn across the top, running downward),
+    steps as horizontal bands top→bottom. Within each band, exchanges are drawn
+    as diagonal crossing lines (sorting-network style) producing a criss-cross.
+    """
+    col_w   = _clamp(1.8 - 0.04 * n_ranks,  0.9, 1.8)   # x-spacing between rank columns
+    band_h  = _clamp(2.4 - 0.05 * n_steps,  1.4, 2.6)   # height of each step band
+    node_r  = _clamp(0.22 - 0.008 * n_ranks, 0.09, 0.20)
+    node_fs = _clamp(9 - 0.35 * n_ranks, 5, 9)
+    lat_fs  = _clamp(7 - 0.25 * n_ranks, 4, 7)
+    rank_fs = _clamp(9 - 0.20 * n_ranks, 6, 9)
+    step_fs = _clamp(9 - 0.20 * n_steps, 6, 9)
+    fig_w   = n_ranks * col_w + 2.0
+    fig_h   = n_steps * band_h + 2.5
+    return dict(col_w=col_w, band_h=band_h, node_r=node_r,
+                node_fs=node_fs, lat_fs=lat_fs,
+                rank_fs=rank_fs, step_fs=step_fs,
+                fig_w=fig_w, fig_h=fig_h)
+
+
+def auto_candle_params(n_ranks, n_steps):
+    """
+    Candle: horizontal rank lanes (P0 top → Pn bottom), steps as vertical columns.
+    Diagonal X crossings between the two exchanging ranks at each step.
+    """
+    col_w    = _clamp(2.4 - 0.06 * n_steps,  1.4, 2.6)
+    row_h    = _clamp(1.0 - 0.02 * n_ranks,  0.6, 1.0)
+    dot_r    = _clamp(0.12 - 0.004 * n_ranks, 0.06, 0.13)
+    wire_lw  = 1.0
+    cross_lw = _clamp(1.8 - 0.04 * n_ranks,  1.0, 1.8)
+    rank_fs  = _clamp(10 - 0.30 * n_ranks, 6, 10)
+    step_fs  = _clamp(9  - 0.20 * n_steps, 6,  9)
+    lat_fs   = _clamp(7  - 0.20 * n_ranks, 4,  7)
+    left_margin = 1.0
+    top_margin  = 0.7
+    fig_w = left_margin + n_steps * col_w + 0.5
+    fig_h = top_margin  + n_ranks * row_h + 0.3
+    return dict(col_w=col_w, row_h=row_h, dot_r=dot_r,
+                wire_lw=wire_lw, cross_lw=cross_lw,
+                rank_fs=rank_fs, step_fs=step_fs, lat_fs=lat_fs,
+                left_margin=left_margin, top_margin=top_margin,
                 fig_w=fig_w, fig_h=fig_h)
 
 
@@ -444,7 +497,7 @@ def plot_butterfly(ops, cfg):
         return palette[s % len(palette)]
 
     node_r  = p["node_r"]
-    jitter  = node_r * 0.55   # horizontal offset so send/recv don't overlap
+    jitter  = node_r * 0.55
 
     # ghost lanes
     x_min = step_x[steps[0]]  - p["col_w"] * 0.4
@@ -477,9 +530,7 @@ def plot_butterfly(ops, cfg):
         if abs(yb - ya) < 1e-9:
             continue
 
-        # send: ra → rb (left side of column)
         _draw_arrow(ax, x - jitter, ya, x - jitter, yb, c, cfg.arrow_lw, node_r)
-        # recv: rb → ra (right side of column)
         _draw_arrow(ax, x + jitter, yb, x + jitter, ya, c, cfg.arrow_lw, node_r)
 
         if cfg.show_latency:
@@ -524,12 +575,348 @@ def plot_butterfly(ops, cfg):
                 fontsize=p["step_fs"], color="#888888",
                 ha="center", va="bottom", style="italic")
 
-    # legend
     if cfg.show_legend:
         patches = [mpatches.Patch(color=step_color(s), label=f"Step {s}")
                    for s in steps]
         ax.legend(handles=patches, loc=cfg.legend_loc,
                   fontsize=8.5, title="Step", title_fontsize=9,
+                  framealpha=0.0, edgecolor="none", labelcolor="#555555")
+
+    ax.autoscale()
+    plt.tight_layout(pad=cfg.pad)
+    _save_show(fig, cfg, dpi)
+
+
+# ── MODE: ladder ──────────────────────────────────────────────────────────────
+#
+# Classic sorting-network / criss-cross diagram:
+#
+#   • Ranks are VERTICAL wires running top-to-bottom (P0…Pn labeled across top).
+#   • Steps are horizontal BANDS stacked top→bottom (labeled on the left).
+#   • Each step band has a vertical extent (band_h). Within that band, every
+#     exchange (rank_a ↔ rank_b) is drawn as TWO diagonal lines forming an X:
+#       line 1: (xa, y_top) → (xb, y_bot)   ↘
+#       line 2: (xb, y_top) → (xa, y_bot)   ↗
+#     These diagonals cross at the midpoint of the band, creating the
+#     criss-cross / sorting-network pattern when multiple pairs exchange
+#     in the same step (e.g. P0↔P2 and P1↔P3 produce two crossing Xs).
+#   • Arrowheads exit at the bottom of the band pointing downward along
+#     each destination rank wire.
+#   • Colored by step.
+#
+def plot_ladder(ops, cfg):
+    ranks, steps = summarize(ops)
+    exchanges    = build_exchanges(ops)
+    n            = len(ranks)
+    ns           = len(steps)
+    p            = auto_ladder_params(n, ns)
+    palette      = cfg.palette
+
+    figsize = cfg.figsize or (p["fig_w"], p["fig_h"])
+    dpi     = cfg.dpi     or _auto_dpi(*figsize)
+
+    fig, ax = plt.subplots(figsize=figsize, facecolor=cfg.bg)
+    ax.set_facecolor(cfg.bg)
+    ax.axis("off")
+    ax.set_title(
+        cfg.title or f"Allgather schedule · {n} ranks · {ns} steps",
+        fontsize=13, color="#444444", pad=16, fontweight="normal"
+    )
+
+    top_margin  = 1.0   # space above first band for rank labels
+    left_margin = 1.2   # space left of rank-0 wire for step labels
+
+    col_w  = p["col_w"]
+    band_h = p["band_h"]
+    node_r = p["node_r"]
+    dot_r  = node_r * 0.5
+
+    rank_x = {r: left_margin + i * col_w for i, r in enumerate(ranks)}
+
+    # Each step band: y_top (entering wire) and y_bot (exiting wire)
+    # Band i occupies y ∈ [-(top_margin + i*band_h), -(top_margin + (i+1)*band_h)]
+    def band_top(si):
+        return -(top_margin + si * band_h)
+    def band_bot(si):
+        return -(top_margin + (si + 1) * band_h)
+    def band_mid(si):
+        return (band_top(si) + band_bot(si)) / 2.0
+
+    def step_color(s):
+        return palette[s % len(palette)]
+
+    # ── vertical rank wires (full height, ghost) ───────────────────────────
+    wire_y0 = -top_margin * 0.25
+    wire_y1 = band_bot(ns - 1) - band_h * 0.15
+    for r in ranks:
+        x = rank_x[r]
+        ax.plot([x, x], [wire_y0, wire_y1],
+                color=cfg.ghost_color, lw=1.0,
+                solid_capstyle="round", zorder=0)
+
+    # ── rank labels (top) ──────────────────────────────────────────────────
+    for r in ranks:
+        ax.text(rank_x[r], -top_margin * 0.05,
+                f"P{r}",
+                fontsize=p["rank_fs"], color="#555555",
+                ha="center", va="bottom", fontweight="600")
+
+    # ── step band labels (left) and separator lines ────────────────────────
+    x_left  = left_margin - col_w * 0.1
+    x_right = rank_x[ranks[-1]] + col_w * 0.1
+    for si, s in enumerate(steps):
+        c = step_color(s)
+        yt = band_top(si)
+        # separator line at top of each band
+        ax.plot([x_left, x_right], [yt, yt],
+                color=cfg.ghost_color, lw=0.4, linestyle="--", zorder=0)
+        ax.text(left_margin - 0.15, band_mid(si),
+                f"step {s}",
+                fontsize=p["step_fs"], color=c,
+                ha="right", va="center", fontweight="500")
+
+    # bottom separator
+    ax.plot([x_left, x_right], [band_bot(ns - 1), band_bot(ns - 1)],
+            color=cfg.ghost_color, lw=0.4, linestyle="--", zorder=0)
+
+    # ── assign each unique exchange pair its own color ─────────────────────
+    # Sort exchanges deterministically so colors are stable across runs.
+    # Color index cycles through the full palette independently of step.
+    pair_color = {}
+    for ci, ex in enumerate(exchanges):
+        pair_color[(ex["rank_a"], ex["rank_b"], ex["step"])] = \
+            palette[ci % len(palette)]
+
+    # ── criss-cross X for each exchange within its step band ───────────────
+    by_step = defaultdict(list)
+    for ex in exchanges:
+        by_step[ex["step"]].append(ex)
+
+    lw_cross = cfg.arrow_lw + 0.5
+
+    legend_patches = []
+
+    for si, s in enumerate(steps):
+        yt = band_top(si)
+        yb = band_bot(si)
+
+        for ex in by_step[s]:
+            ra    = ex["rank_a"]
+            rb    = ex["rank_b"]
+            xa    = rank_x[ra]
+            xb    = rank_x[rb]
+            color = pair_color[(ra, rb, s)]
+
+            if abs(xb - xa) < 1e-9:
+                continue
+
+            legend_patches.append(
+                mpatches.Patch(color=color, label=f"P{ra}↔P{rb} (step {s})"))
+
+            # ── two diagonal lines forming the X ──────────────────────────
+            # line ↘: (xa, yt) → (xb, yb)
+            ax.plot([xa, xb], [yt, yb], color=color, lw=lw_cross,
+                    solid_capstyle="round", zorder=2)
+            # line ↗: (xb, yt) → (xa, yb)
+            ax.plot([xb, xa], [yt, yb], color=color, lw=lw_cross,
+                    solid_capstyle="round", zorder=2)
+
+            # ── arrowheads along the diagonals, pointing in diagonal direction ──
+            t = 0.30
+            dx = xb - xa
+            dy = yb - yt
+            diag_len = math.hypot(dx, dy)
+            ux, uy = dx / diag_len, dy / diag_len   # unit vec ↘
+
+            # ↘ diagonal: tip at (xb, yb)
+            tail_x1 = xb - ux * diag_len * t
+            tail_y1 = yb - uy * diag_len * t
+            _draw_arrow(ax, tail_x1, tail_y1, xb, yb, color, lw_cross, dot_r, mutation_scale=11)
+
+            # ↗ diagonal: tip at (xa, yb)
+            tail_x2 = xa + ux * diag_len * t
+            tail_y2 = yb - uy * diag_len * t
+            _draw_arrow(ax, tail_x2, tail_y2, xa, yb, color, lw_cross, dot_r, mutation_scale=11)
+
+            # ── dots at wire entry (top) and exit (bottom) of the X ───────
+            for xd, yd in [(xa, yt), (xb, yt), (xa, yb), (xb, yb)]:
+                ax.add_patch(plt.Circle((xd, yd), dot_r,
+                                        color=color, zorder=4,
+                                        linewidth=0, ec="none"))
+
+            # ── latency label: along the ↘ diagonal at 1/3 from top,
+            #    offset perpendicularly left — same color as the lines.
+            if cfg.show_latency:
+                lats = [v for v in (ex["send_lat"], ex["recv_lat"])
+                        if v is not None]
+                if lats:
+                    avg_lat = sum(lats) / len(lats)
+                    t_label = 0.33
+                    lx = xa + ux * diag_len * t_label
+                    ly = yt + uy * diag_len * t_label
+                    perp_offset = dot_r * 3.5
+                    lx -= uy * perp_offset
+                    ly += ux * perp_offset
+                    ax.text(lx, ly,
+                            f"{avg_lat:.0f} µs",
+                            fontsize=p["lat_fs"], color=color,
+                            ha="center", va="center",
+                            bbox=dict(boxstyle="round,pad=0.15",
+                                      fc=cfg.bg, ec=color, alpha=0.85,
+                                      linewidth=0.8),
+                            zorder=5)
+
+    # ── legend ────────────────────────────────────────────────────────────
+    if cfg.show_legend and len(legend_patches) <= 20:
+        ax.legend(handles=legend_patches, loc=cfg.legend_loc,
+                  fontsize=7.5, title="Exchange pairs", title_fontsize=8.5,
+                  framealpha=0.0, edgecolor="none", labelcolor="#aaaaaa",
+                  ncol=max(1, len(legend_patches) // 8))
+
+    ax.autoscale()
+    plt.tight_layout(pad=cfg.pad)
+    _save_show(fig, cfg, dpi)
+
+
+# ── MODE: candle ──────────────────────────────────────────────────────────────
+#
+# Horizontal rank lanes (P0 top → Pn bottom), steps as vertical columns.
+# For every exchange at step s, a vertical connector between the two rank lanes,
+# with bidirectional arrowheads — like a sorting-network compare-swap element
+# drawn as a vertical bar with arrows rather than an X crossing.
+#
+def plot_candle(ops, cfg):
+    ranks, steps = summarize(ops)
+    exchanges    = build_exchanges(ops)
+    n            = len(ranks)
+    ns           = len(steps)
+    p            = auto_candle_params(n, ns)
+    palette      = cfg.palette
+
+    figsize = cfg.figsize or (p["fig_w"], p["fig_h"])
+    dpi     = cfg.dpi     or _auto_dpi(*figsize)
+
+    fig, ax = plt.subplots(figsize=figsize, facecolor=cfg.bg)
+    ax.set_facecolor(cfg.bg)
+    ax.axis("off")
+    ax.set_title(
+        cfg.title or f"Allgather schedule · {n} ranks · {ns} steps",
+        fontsize=13, color="#444444", pad=14, fontweight="normal"
+    )
+
+    lm = p["left_margin"]
+    tm = p["top_margin"]
+
+    # rank r → y  (rows, top-to-bottom, y decreases)
+    # step s → x  (columns, left-to-right)
+    rank_y = {r: -(tm + i * p["row_h"]) for i, r in enumerate(ranks)}
+    step_x = {s: lm + (i + 0.5) * p["col_w"] for i, s in enumerate(steps)}
+
+    def step_color(s):
+        return palette[s % len(palette)]
+
+    # ── horizontal rank wires ──────────────────────────────────────────────
+    wire_x0 = lm * 0.05
+    wire_x1 = step_x[steps[-1]] + p["col_w"] * 0.5
+
+    for r in ranks:
+        y = rank_y[r]
+        ax.plot([wire_x0, wire_x1], [y, y],
+                color=cfg.ghost_color, lw=p["wire_lw"],
+                solid_capstyle="round", zorder=1)
+
+    # ── rank labels on the left ────────────────────────────────────────────
+    for r in ranks:
+        ax.text(wire_x0 - 0.08, rank_y[r],
+                f"P{r}",
+                fontsize=p["rank_fs"], color="#444444",
+                ha="right", va="center", fontweight="700")
+
+    # ── step labels across the top ─────────────────────────────────────────
+    for s in steps:
+        ax.text(step_x[s], -tm * 0.08,
+                f"step {s}",
+                fontsize=p["step_fs"], color=step_color(s),
+                ha="center", va="bottom", fontweight="500")
+
+    # ── vertical connectors with bidirectional arrowheads ──────────────────
+    by_step = defaultdict(list)
+    for ex in exchanges:
+        by_step[ex["step"]].append(ex)
+
+    for s in steps:
+        cx  = step_x[s]
+        col = step_color(s)
+
+        exs = by_step[s]
+        n_ex = len(exs)
+        # if multiple exchanges at this step, spread them horizontally
+        spread  = p["col_w"] * 0.22 if n_ex > 1 else 0.0
+        offsets = [((i - (n_ex - 1) / 2.0) * spread) for i in range(n_ex)]
+
+        for ex, dx in zip(exs, offsets):
+            ra  = ex["rank_a"]   # smaller index → higher on canvas
+            rb  = ex["rank_b"]   # larger index  → lower on canvas
+            ya  = rank_y[ra]
+            yb  = rank_y[rb]
+            x   = cx + dx
+
+            if abs(yb - ya) < 1e-9:
+                continue
+
+            # vertical connector
+            ax.plot([x, x], [ya, yb],
+                    color=col, lw=p["cross_lw"],
+                    solid_capstyle="round", zorder=3)
+
+            # arrowheads: downward (ra→rb) near rb, upward (rb→ra) near ra
+            dot_r = p["dot_r"]
+            ah    = dot_r * 2.5   # arrowhead tip offset from wire
+            ms    = 9
+
+            # downward arrowhead close to rb wire
+            ax.annotate("",
+                xy=(x, yb + ah), xytext=(x, yb + ah * 4.0),
+                arrowprops=dict(arrowstyle="-|>", color=col,
+                                lw=p["cross_lw"] * 0.8, mutation_scale=ms,
+                                shrinkA=0, shrinkB=0),
+                zorder=4)
+
+            # upward arrowhead close to ra wire
+            ax.annotate("",
+                xy=(x, ya - ah), xytext=(x, ya - ah * 4.0),
+                arrowprops=dict(arrowstyle="-|>", color=col,
+                                lw=p["cross_lw"] * 0.8, mutation_scale=ms,
+                                shrinkA=0, shrinkB=0),
+                zorder=4)
+
+            # filled dots where connector meets the rank wires
+            for yd in (ya, yb):
+                ax.add_patch(plt.Circle((x, yd), dot_r,
+                                        color=col, zorder=5,
+                                        linewidth=0, ec="none"))
+
+            # latency label beside the connector midpoint
+            if cfg.show_latency:
+                lats = [v for v in (ex["send_lat"], ex["recv_lat"])
+                        if v is not None]
+                if lats:
+                    avg_lat = sum(lats) / len(lats)
+                    mid_y   = (ya + yb) / 2.0
+                    ax.text(x + dot_r * 2.8, mid_y,
+                            f"{avg_lat:.0f} µs",
+                            fontsize=p["lat_fs"], color=col,
+                            ha="left", va="center",
+                            bbox=dict(boxstyle="round,pad=0.14",
+                                      fc=cfg.bg, ec="none", alpha=0.92),
+                            zorder=6)
+
+    # ── legend ────────────────────────────────────────────────────────────
+    if cfg.show_legend and ns <= 16:
+        patches = [mpatches.Patch(color=step_color(s), label=f"Step {s}")
+                   for s in steps]
+        ax.legend(handles=patches, loc=cfg.legend_loc,
+                  fontsize=8.5, title="algo_idx", title_fontsize=9,
                   framealpha=0.0, edgecolor="none", labelcolor="#555555")
 
     ax.autoscale()
@@ -556,7 +943,7 @@ def parse_args():
 
     p.add_argument("json_file")
 
-    p.add_argument("--mode", choices=["grid", "overlay", "butterfly"],
+    p.add_argument("--mode", choices=["grid", "overlay", "butterfly", "ladder", "candle"],
                    default="grid",
                    help="Visualization mode (default: grid)")
 
@@ -627,7 +1014,10 @@ def main():
         legend_loc   = args.legend_loc,
     )
 
-    dispatch = dict(grid=plot_grid, overlay=plot_overlay, butterfly=plot_butterfly)
+    dispatch = dict(grid=plot_grid, overlay=plot_overlay,
+                    butterfly=plot_butterfly,
+                    ladder=plot_ladder,   # vertical rank wires, horizontal step rows
+                    candle=plot_candle)   # horizontal rank lanes, vertical connectors
     dispatch[cfg.mode](ops, cfg)
 
 
